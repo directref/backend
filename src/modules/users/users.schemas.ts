@@ -11,7 +11,7 @@ export const UpdateProfileSchema = z.object({
 });
 
 export const SearchUsersSchema = z.object({
-  q: z.string().min(1).max(100),
+  q: z.string().max(100).default(''),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });

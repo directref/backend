@@ -34,7 +34,7 @@ export async function sendRequest(requesterId: string, addresseeId: string) {
       'connection_request',
       `${requester.fullName} wants to connect`,
       'Accept their request to see jobs at their company.',
-      '/network',
+      '/network?tab=pending',
     ).catch(() => {});
   }
 
@@ -112,7 +112,7 @@ export async function updateConnection(connectionId: string, userId: string, sta
         'connection_accepted',
         `${accepter.fullName} accepted your connection`,
         'You can now see their job postings and send your CV.',
-        '/network',
+        '/network?tab=pending',
       ).catch(() => {});
     }
   }

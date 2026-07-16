@@ -23,6 +23,15 @@ export async function updateProfile(userId: string, dto: UpdateProfileDto) {
 
 export async function searchUsers(q: string, page: number, limit: number, requesterId: string) {
   const offset = (page - 1) * limit;
+
+  // If no query — return all users except self (for "People you may know")
+  const whereClause = q.trim()
+    ? and(
+        or(ilike(users.fullName, `%${q}%`), ilike(users.companyName, `%${q}%`)),
+        ne(users.id, requesterId),
+      )
+    : ne(users.id, requesterId);
+
   const results = await db
     .select({
       id: users.id,
@@ -34,12 +43,7 @@ export async function searchUsers(q: string, page: number, limit: number, reques
       createdAt: users.createdAt,
     })
     .from(users)
-    .where(
-      and(
-        or(ilike(users.fullName, `%${q}%`), ilike(users.companyName, `%${q}%`)),
-        ne(users.id, requesterId),
-      ),
-    )
+    .where(whereClause)
     .limit(limit)
     .offset(offset);
   return results;
