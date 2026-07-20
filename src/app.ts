@@ -41,7 +41,21 @@ app.use(
 
 app.use(
   cors({
-    origin: env.FRONTEND_URL,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, etc.)
+      if (!origin) return callback(null, true);
+      // Allow localhost and any local network IP
+      const allowed = [
+        env.FRONTEND_URL,
+        'http://localhost:3001',
+        'http://10.100.102.187:3001',
+      ];
+      if (allowed.includes(origin) || origin.match(/^http:\/\/192\.168\.\d+\.\d+:3001$/) || origin.match(/^http:\/\/10\.\d+\.\d+\.\d+:3001$/)) {
+        callback(null, true);
+      } else {
+        callback(null, true); // allow all in dev
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

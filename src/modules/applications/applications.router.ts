@@ -20,5 +20,6 @@ router.get('/:id', ctrl.getApplication);
 router.patch('/:id/status', validate(UpdateStatusSchema), ctrl.updateStatus);
 router.post('/:id/forward', validate(ForwardToHRSchema), ctrl.forwardToHR);
 router.get('/:id/cv', ctrl.downloadCV);
+router.get('/:id/cv/preview', ctrl.previewCV);
 
 export default router;

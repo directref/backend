@@ -30,14 +30,7 @@ export async function submitApplication(
     throw new AppError(400, 'SELF_APPLICATION', 'You cannot apply to your own job posting');
   }
 
-  // 3. Must be connected friends
-  const friends = await areFriends(seekerId, job.referrerId);
-  if (!friends) {
-    fs.unlink(file.path, () => {});
-    throw new AppError(403, 'NOT_CONNECTED', 'You must be connected with the referrer to send your CV');
-  }
-
-  // 4. No duplicate applications
+  // 3. No duplicate applications
   const [existing] = await db
     .select()
     .from(applications)
@@ -245,6 +238,40 @@ export async function forwardToHR(applicationId: string, referrerId: string, dto
     .returning();
 
   return updated;
+}
+
+/** Stream CV file inline (for viewing in browser) */
+export async function getCVPreviewPath(applicationId: string, userId: string): Promise<{ filePath: string; mimeType: string }> {
+  const [app] = await db.select().from(applications).where(eq(applications.id, applicationId)).limit(1);
+  if (!app) throw new AppError(404, 'NOT_FOUND', 'Application not found');
+  if (app.seekerId !== userId && app.referrerId !== userId) {
+    throw new AppError(403, 'FORBIDDEN', 'Access denied');
+  }
+
+  const filePath = path.join(process.cwd(), env.UPLOADS_DIR, 'cvs', app.cvFilename);
+  if (!fs.existsSync(filePath)) {
+    throw new AppError(404, 'FILE_NOT_FOUND', 'CV file not found on server');
+  }
+
+  // Auto-mark as viewed when referrer previews
+  if (app.referrerId === userId && app.status === 'submitted') {
+    db.update(applications)
+      .set({ status: 'viewed', updatedAt: new Date() })
+      .where(eq(applications.id, applicationId))
+      .execute()
+      .then(async () => {
+        const [job]      = await db.select().from(jobs).where(eq(jobs.id, app.jobId)).limit(1);
+        const [seeker]   = await db.select().from(users).where(eq(users.id, app.seekerId)).limit(1);
+        const [referrer] = await db.select().from(users).where(eq(users.id, app.referrerId)).limit(1);
+        if (job && seeker && referrer) {
+          const appsUrl = `${env.FRONTEND_URL}/applications`;
+          createNotification(seeker.id, 'cv_viewed', `${referrer.fullName} viewed your CV`, `Your CV for ${job.title} at ${job.companyName} was opened.`, appsUrl).catch(() => {});
+          sendCVViewedEmail(seeker.email, seeker.fullName, referrer.fullName, job.title, job.companyName, appsUrl).catch(() => {});
+        }
+      }).catch(() => {});
+  }
+
+  return { filePath, mimeType: app.cvMimetype };
 }
 
 /** Stream CV file — accessible by seeker (uploader) or referrer */

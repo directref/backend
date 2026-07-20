@@ -42,3 +42,11 @@ export const downloadCV = asyncHandler(async (req: Request, res: Response) => {
   const { filePath, originalName } = await appService.getCVPath(String(req.params.id), req.user!.id);
   res.download(filePath, originalName);
 });
+
+export const previewCV = asyncHandler(async (req: Request, res: Response) => {
+  const { filePath, mimeType } = await appService.getCVPreviewPath(String(req.params.id), req.user!.id);
+  // Serve inline so the browser displays it rather than downloading
+  res.setHeader('Content-Type', mimeType);
+  res.setHeader('Content-Disposition', 'inline');
+  res.sendFile(filePath);
+});
