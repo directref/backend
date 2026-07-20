@@ -1,6 +1,6 @@
 import { db } from '../../config/db';
 import { jobs, connections, users } from '../../db/schema';
-import { eq, and, or, ilike, desc, inArray } from 'drizzle-orm';
+import { eq, and, or, ilike, desc, inArray, ne } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler';
 import { scrapeJobUrl } from '../../services/jobScraper';
 import type { CreateJobDto, UpdateJobDto } from './jobs.schemas';
@@ -37,26 +37,9 @@ export async function getJobById(jobId: string) {
   return row;
 }
 
-/** Jobs from the user's accepted connections — the personalized feed */
+/** Jobs feed — all active jobs except your own */
 export async function getJobFeed(seekerId: string, page: number, limit: number) {
   const offset = (page - 1) * limit;
-
-  // Get all accepted connection partner IDs
-  const acceptedConns = await db
-    .select({ requesterId: connections.requesterId, addresseeId: connections.addresseeId })
-    .from(connections)
-    .where(
-      and(
-        or(eq(connections.requesterId, seekerId), eq(connections.addresseeId, seekerId)),
-        eq(connections.status, 'accepted'),
-      ),
-    );
-
-  const friendIds = acceptedConns.map((c) =>
-    c.requesterId === seekerId ? c.addresseeId : c.requesterId,
-  );
-
-  if (friendIds.length === 0) return { data: [], total: 0 };
 
   const feed = await db
     .select({
@@ -71,7 +54,7 @@ export async function getJobFeed(seekerId: string, page: number, limit: number) 
     })
     .from(jobs)
     .innerJoin(users, eq(users.id, jobs.referrerId))
-    .where(and(inArray(jobs.referrerId, friendIds), eq(jobs.isActive, true)))
+    .where(and(eq(jobs.isActive, true), ne(jobs.referrerId, seekerId)))
     .orderBy(desc(jobs.createdAt))
     .limit(limit)
     .offset(offset);
