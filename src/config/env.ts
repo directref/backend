@@ -23,6 +23,7 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().default(''),
   EMAIL_FROM: z.string().default('noreply@vouch.app'),
 
+  ADMIN_SECRET: z.string().default('directref_admin_2024_secret_key'),
   UPLOADS_DIR: z.string().default('./uploads'),
   MAX_CV_SIZE_MB: z.coerce.number().default(10),
 });

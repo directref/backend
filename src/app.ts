@@ -20,6 +20,7 @@ import jobsRouter from './modules/jobs/jobs.router';
 import applicationsRouter from './modules/applications/applications.router';
 import notificationsRouter from './modules/notifications/notifications.router';
 import invitesRouter from './modules/invites/invites.router';
+import adminRouter from './modules/admin/admin.router';
 
 // Ensure uploads directory exists
 const uploadDir = path.join(process.cwd(), env.UPLOADS_DIR, 'cvs');
@@ -58,7 +59,7 @@ app.use(
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret'],
   }),
 );
 
@@ -98,6 +99,7 @@ app.use('/api/jobs', jobsRouter);
 app.use('/api/applications', applicationsRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/invites', invitesRouter);
+app.use('/api/admin',  adminRouter);
 
 // ─── 404 handler ─────────────────────────────────────────────────────────────
 app.use((_req, res) => {

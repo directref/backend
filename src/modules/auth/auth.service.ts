@@ -27,19 +27,24 @@ export async function register(dto: RegisterDto): Promise<User> {
   const emailVerifyToken = crypto.randomBytes(32).toString('hex');
   const inviteCode = generateInviteCode(dto.fullName);
 
+  const hasEmailService = !!env.RESEND_API_KEY && env.RESEND_API_KEY !== 're_xxxxxxxxxxxxxxxxxxxx';
+
   const [user] = await db.insert(users).values({
     email: dto.email.toLowerCase(),
     passwordHash,
     fullName: dto.fullName,
     isReferrer: dto.isReferrer,
-    emailVerifyToken,
+    emailVerifyToken: hasEmailService ? emailVerifyToken : null,
+    emailVerified: !hasEmailService, // auto-verify if no email service
     inviteCode,
   }).returning();
 
-  // Fire-and-forget — don't fail registration if email sending fails
-  sendVerificationEmail(user.email, emailVerifyToken, user.fullName).catch((err) =>
-    console.error('[email] verification send failed:', err),
-  );
+  // Only send verification email if Resend is configured
+  if (hasEmailService) {
+    sendVerificationEmail(user.email, emailVerifyToken, user.fullName).catch((err) =>
+      console.error('[email] verification send failed:', err),
+    );
+  }
 
   return user;
 }
