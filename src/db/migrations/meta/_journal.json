@@ -22,6 +22,13 @@
       "when": 1784146721055,
       "tag": "0002_violet_kingpin",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784715593212,
+      "tag": "0003_flat_sleeper",
+      "breakpoints": true
     }
   ]
 }

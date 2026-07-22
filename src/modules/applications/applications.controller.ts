@@ -50,3 +50,17 @@ export const previewCV = asyncHandler(async (req: Request, res: Response) => {
   res.setHeader('Content-Disposition', 'inline');
   res.sendFile(filePath);
 });
+
+export const getMessages = asyncHandler(async (req: Request, res: Response) => {
+  const data = await appService.getMessages(String(req.params.id), req.user!.id);
+  res.json({ data });
+});
+
+export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
+  const message = await appService.sendMessage(
+    String(req.params.id),
+    req.user!.id,
+    req.body.content,
+  );
+  res.status(201).json({ data: message });
+});

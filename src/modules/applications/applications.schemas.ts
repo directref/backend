@@ -14,5 +14,10 @@ export const ForwardToHRSchema = z.object({
   referrerNote: z.string().max(2000).optional(),
 });
 
+export const SendMessageSchema = z.object({
+  content: z.string().min(1, 'Message cannot be empty').max(2000, 'Message too long'),
+});
+
 export type SubmitApplicationDto = z.infer<typeof SubmitApplicationSchema>;
 export type ForwardToHRDto = z.infer<typeof ForwardToHRSchema>;
+export type SendMessageDto = z.infer<typeof SendMessageSchema>;

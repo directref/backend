@@ -4,7 +4,7 @@ import { validate } from '../../middleware/validate';
 import { requireAuth } from '../../middleware/auth';
 import { uploadLimiter } from '../../middleware/rateLimiter';
 import { uploadCV } from '../../middleware/upload';
-import { SubmitApplicationSchema, UpdateStatusSchema, ForwardToHRSchema } from './applications.schemas';
+import { SubmitApplicationSchema, UpdateStatusSchema, ForwardToHRSchema, SendMessageSchema } from './applications.schemas';
 
 const router = Router();
 
@@ -21,5 +21,7 @@ router.patch('/:id/status', validate(UpdateStatusSchema), ctrl.updateStatus);
 router.post('/:id/forward', validate(ForwardToHRSchema), ctrl.forwardToHR);
 router.get('/:id/cv', ctrl.downloadCV);
 router.get('/:id/cv/preview', ctrl.previewCV);
+router.get('/:id/messages', ctrl.getMessages);
+router.post('/:id/messages', validate(SendMessageSchema), ctrl.sendMessage);
 
 export default router;

@@ -1,8 +1,8 @@
 import path from 'path';
 import fs from 'fs';
 import { db } from '../../config/db';
-import { applications, jobs, users } from '../../db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { applications, applicationMessages, jobs, users } from '../../db/schema';
+import { eq, and, desc, ne } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler';
 import { areFriends } from '../connections/connections.service';
 import { createNotification } from '../notifications/notifications.service';
@@ -323,4 +323,147 @@ export async function getCVPath(applicationId: string, userId: string): Promise<
   }
 
   return { filePath, originalName: app.cvOriginalName };
+}
+
+// ── Messaging ─────────────────────────────────────────────────────────────────
+
+export interface MessageRow {
+  id: string;
+  applicationId: string;
+  senderId: string;
+  senderName: string;
+  senderAvatarUrl: string | null;
+  content: string;
+  isRead: boolean;
+  createdAt: Date;
+}
+
+/** Fetch the message thread for an application.
+ *  Also marks all messages sent by the OTHER party as read. */
+export async function getMessages(
+  applicationId: string,
+  userId: string,
+): Promise<{ messages: MessageRow[]; unreadCount: number }> {
+  const [app] = await db.select().from(applications).where(eq(applications.id, applicationId)).limit(1);
+  if (!app) throw new AppError(404, 'NOT_FOUND', 'Application not found');
+  if (app.seekerId !== userId && app.referrerId !== userId) {
+    throw new AppError(403, 'FORBIDDEN', 'Access denied');
+  }
+
+  // Count unread messages from the other party BEFORE marking them read
+  const allMessages = await db
+    .select({
+      id: applicationMessages.id,
+      applicationId: applicationMessages.applicationId,
+      senderId: applicationMessages.senderId,
+      senderName: users.fullName,
+      senderAvatarUrl: users.avatarUrl,
+      content: applicationMessages.content,
+      isRead: applicationMessages.isRead,
+      createdAt: applicationMessages.createdAt,
+    })
+    .from(applicationMessages)
+    .innerJoin(users, eq(users.id, applicationMessages.senderId))
+    .where(eq(applicationMessages.applicationId, applicationId))
+    .orderBy(applicationMessages.createdAt);
+
+  const unreadCount = allMessages.filter((m) => !m.isRead && m.senderId !== userId).length;
+
+  // Mark the other party's messages as read (fire-and-forget)
+  db.update(applicationMessages)
+    .set({ isRead: true })
+    .where(
+      and(
+        eq(applicationMessages.applicationId, applicationId),
+        ne(applicationMessages.senderId, userId),
+        eq(applicationMessages.isRead, false),
+      ),
+    )
+    .execute()
+    .catch(() => {});
+
+  return { messages: allMessages, unreadCount };
+}
+
+/** Send a message within an application thread */
+export async function sendMessage(
+  applicationId: string,
+  senderId: string,
+  content: string,
+): Promise<MessageRow> {
+  const [app] = await db.select().from(applications).where(eq(applications.id, applicationId)).limit(1);
+  if (!app) throw new AppError(404, 'NOT_FOUND', 'Application not found');
+  if (app.seekerId !== senderId && app.referrerId !== senderId) {
+    throw new AppError(403, 'FORBIDDEN', 'Access denied');
+  }
+
+  const [inserted] = await db
+    .insert(applicationMessages)
+    .values({ applicationId, senderId, content })
+    .returning();
+
+  // Notify the other party — fire-and-forget
+  const recipientId = senderId === app.seekerId ? app.referrerId : app.seekerId;
+  const recipientLinkUrl =
+    senderId === app.seekerId
+      ? `${env.FRONTEND_URL}/applications/inbox`
+      : `${env.FRONTEND_URL}/applications`;
+
+  db.select({ fullName: users.fullName, avatarUrl: users.avatarUrl })
+    .from(users)
+    .where(eq(users.id, senderId))
+    .limit(1)
+    .then(([sender]) => {
+      if (!sender) return;
+      const preview = content.length > 120 ? `${content.slice(0, 117)}…` : content;
+      createNotification(
+        recipientId,
+        'application_message' as Parameters<typeof createNotification>[1],
+        `${sender.fullName} sent you a message`,
+        preview,
+        recipientLinkUrl,
+      ).catch(() => {});
+    })
+    .catch(() => {});
+
+  // Return with sender info joined
+  const [row] = await db
+    .select({
+      id: applicationMessages.id,
+      applicationId: applicationMessages.applicationId,
+      senderId: applicationMessages.senderId,
+      senderName: users.fullName,
+      senderAvatarUrl: users.avatarUrl,
+      content: applicationMessages.content,
+      isRead: applicationMessages.isRead,
+      createdAt: applicationMessages.createdAt,
+    })
+    .from(applicationMessages)
+    .innerJoin(users, eq(users.id, applicationMessages.senderId))
+    .where(eq(applicationMessages.id, inserted.id))
+    .limit(1);
+
+  return row;
+}
+
+/** Get unread message count for an application (for badge display without opening thread) */
+export async function getUnreadMessageCount(applicationId: string, userId: string): Promise<number> {
+  const [app] = await db.select().from(applications).where(eq(applications.id, applicationId)).limit(1);
+  if (!app) throw new AppError(404, 'NOT_FOUND', 'Application not found');
+  if (app.seekerId !== userId && app.referrerId !== userId) {
+    throw new AppError(403, 'FORBIDDEN', 'Access denied');
+  }
+
+  const rows = await db
+    .select({ id: applicationMessages.id })
+    .from(applicationMessages)
+    .where(
+      and(
+        eq(applicationMessages.applicationId, applicationId),
+        ne(applicationMessages.senderId, userId),
+        eq(applicationMessages.isRead, false),
+      ),
+    );
+
+  return rows.length;
 }
