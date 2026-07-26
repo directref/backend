@@ -36,11 +36,15 @@ export async function scrapeJobUrl(url: string): Promise<ScrapedJob> {
         const data = JSON.parse(match[1]);
         const job = Array.isArray(data) ? data.find((d) => d['@type'] === 'JobPosting') : data['@type'] === 'JobPosting' ? data : null;
         if (job) {
+          // addressCountry can be a plain string ("IN") or an object { "@type": "Country", "name": "India" }
+          const rawCountry = job.jobLocation?.address?.addressCountry;
+          const country = typeof rawCountry === 'string' ? rawCountry : rawCountry?.name ?? undefined;
+          const locality = job.jobLocation?.address?.addressLocality;
           return {
             title: job.title ?? undefined,
             companyName: job.hiringOrganization?.name ?? undefined,
-            location: job.jobLocation?.address?.addressLocality
-              ? [job.jobLocation.address.addressLocality, job.jobLocation.address.addressCountry].filter(Boolean).join(', ')
+            location: locality
+              ? [locality, country].filter(Boolean).join(', ')
               : undefined,
             description: job.description
               ? job.description.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 800)
