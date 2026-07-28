@@ -18,6 +18,9 @@ export const users = pgTable(
     emailVerifyToken: varchar('email_verify_token', { length: 64 }),
     resetToken: varchar('reset_token', { length: 64 }),
     resetTokenExp: timestamp('reset_token_exp', { withTimezone: true }),
+    // Job-matching preferences (seeker)
+    desiredRole: varchar('desired_role', { length: 200 }),
+    preferredLocation: varchar('preferred_location', { length: 200 }),
     // Onboarding + invite
     onboarded: boolean('onboarded').notNull().default(false),
     inviteCode: varchar('invite_code', { length: 16 }).unique(),

@@ -8,6 +8,8 @@ export const UpdateProfileSchema = z.object({
   isSeeker: z.boolean().optional(),
   avatarUrl: z.string().url().optional().nullable(),
   onboarded: z.boolean().optional(),
+  desiredRole: z.string().max(200).optional().nullable(),
+  preferredLocation: z.string().max(200).optional().nullable(),
 });
 
 export const SearchUsersSchema = z.object({

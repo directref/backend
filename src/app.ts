@@ -20,6 +20,7 @@ import jobsRouter from './modules/jobs/jobs.router';
 import applicationsRouter from './modules/applications/applications.router';
 import notificationsRouter from './modules/notifications/notifications.router';
 import invitesRouter from './modules/invites/invites.router';
+import savedJobsRouter from './modules/savedJobs/savedJobs.router';
 import adminRouter from './modules/admin/admin.router';
 
 // Ensure uploads directory exists
@@ -99,6 +100,7 @@ app.use('/api/jobs', jobsRouter);
 app.use('/api/applications', applicationsRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/invites', invitesRouter);
+app.use('/api/saved-jobs', savedJobsRouter);
 app.use('/api/admin',  adminRouter);
 
 // ─── 404 handler ─────────────────────────────────────────────────────────────
