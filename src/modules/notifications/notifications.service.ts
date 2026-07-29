@@ -2,7 +2,7 @@ import { db } from '../../config/db';
 import { notifications } from '../../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 
-export type NotificationType = 'cv_viewed' | 'cv_forwarded' | 'cv_received' | 'connection_request' | 'connection_accepted';
+export type NotificationType = 'cv_viewed' | 'cv_forwarded' | 'cv_received' | 'cv_rejected' | 'connection_request' | 'connection_accepted';
 
 /** Create a notification for a user */
 export async function createNotification(

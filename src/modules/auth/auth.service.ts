@@ -1,4 +1,5 @@
 import { db } from '../../config/db';
+import { env } from '../../config/env';
 import { users } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
