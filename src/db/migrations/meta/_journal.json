@@ -29,6 +29,20 @@
       "when": 1784715593212,
       "tag": "0003_flat_sleeper",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784900000000,
+      "tag": "0004_user_job_preferences",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785263451310,
+      "tag": "0005_many_blizzard",
+      "breakpoints": true
     }
   ]
 }
