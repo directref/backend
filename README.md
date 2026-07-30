@@ -1,4 +1,4 @@
-# Refrd — Backend API
+# DirectRef — Backend API
 
 > Referral-first job network. Your CV, straight to a friend inside the company.
 
@@ -11,8 +11,8 @@
 
 ### 1. Clone the repo
 ```bash
-git clone https://github.com/anatAtar/refrd-backend.git
-cd refrd-backend
+git clone https://github.com/directref/backend.git
+cd backend
 ```
 
 ### 2. Install dependencies
@@ -113,4 +113,4 @@ npm run docker:down  # Stop containers
 
 ## Related
 
-👉 Frontend repo: https://github.com/anatAtar/refrd-frontend
+👉 Frontend repo: https://github.com/directref/frontend

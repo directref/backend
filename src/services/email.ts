@@ -6,7 +6,7 @@ const resend = new Resend(env.RESEND_API_KEY || 're_placeholder_key');
 
 const brand = {
   color: '#7B65E8',
-  name: 'Refrd',
+  name: 'DirectRef',
 };
 
 function btn(href: string, label: string) {

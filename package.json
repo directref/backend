@@ -1,7 +1,7 @@
 {
-  "name": "vouch-backend",
+  "name": "directref-backend",
   "version": "1.0.0",
-  "description": "Vouch — referral-first job network API",
+  "description": "DirectRef — referral-first job network API",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",

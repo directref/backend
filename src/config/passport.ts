@@ -97,7 +97,7 @@ export function configurePassport(): void {
             const [newUser] = await db
               .insert(users)
               .values({
-                email: googleEmail ?? `google_${googleId}@placeholder.vouch`,
+                email: googleEmail ?? `google_${googleId}@placeholder.directref`,
                 fullName,
                 googleId,
                 avatarUrl,

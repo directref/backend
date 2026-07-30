@@ -21,7 +21,7 @@ const envSchema = z.object({
   GOOGLE_CALLBACK_URL: z.string().default('http://localhost:3000/api/auth/google/callback'),
 
   RESEND_API_KEY: z.string().default(''),
-  EMAIL_FROM: z.string().default('noreply@vouch.app'),
+  EMAIL_FROM: z.string().default('support@direct-ref.com'),
 
   ADMIN_SECRET: z.string().default('directref_admin_2024_secret_key'),
   UPLOADS_DIR: z.string().default('./uploads'),
