@@ -39,6 +39,7 @@ export function setAuthCookies(res: Response, payload: AccessTokenPayload): void
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? 'strict' : 'lax',
+    domain: env.COOKIE_DOMAIN,
     maxAge: 15 * 60 * 1000, // 15 minutes
     path: '/',
   });
@@ -47,12 +48,13 @@ export function setAuthCookies(res: Response, payload: AccessTokenPayload): void
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? 'strict' : 'lax',
+    domain: env.COOKIE_DOMAIN,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     path: '/api/auth/refresh',
   });
 }
 
 export function clearAuthCookies(res: Response): void {
-  res.clearCookie('access_token', { path: '/' });
-  res.clearCookie('refresh_token', { path: '/api/auth/refresh' });
+  res.clearCookie('access_token', { path: '/', domain: env.COOKIE_DOMAIN });
+  res.clearCookie('refresh_token', { path: '/api/auth/refresh', domain: env.COOKIE_DOMAIN });
 }

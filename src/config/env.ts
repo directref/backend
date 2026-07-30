@@ -26,6 +26,8 @@ const envSchema = z.object({
   ADMIN_SECRET: z.string().default('directref_admin_2024_secret_key'),
   UPLOADS_DIR: z.string().default('./uploads'),
   MAX_CV_SIZE_MB: z.coerce.number().default(10),
+
+  COOKIE_DOMAIN: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
