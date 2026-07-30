@@ -43,6 +43,13 @@
       "when": 1785263451310,
       "tag": "0005_many_blizzard",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785441901289,
+      "tag": "0006_chemical_sprite",
+      "breakpoints": true
     }
   ]
 }

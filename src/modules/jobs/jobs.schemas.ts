@@ -7,6 +7,7 @@ export const CreateJobSchema = z.object({
   location: z.string().max(200).optional(),
   description: z.string().optional(),
   jobType: z.enum(['full-time', 'part-time', 'contract', 'freelance', 'internship']).optional(),
+  workMode: z.enum(['remote', 'hybrid', 'onsite']).optional(),
   salaryRange: z.string().max(100).optional(),
   bonusAmount: z.coerce.number().positive().optional(),
   bonusCurrency: z.string().max(10).optional(),

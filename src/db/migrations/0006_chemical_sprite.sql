@@ -1,0 +1,1 @@
+ALTER TABLE "jobs" ADD COLUMN "work_mode" varchar(20);

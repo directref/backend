@@ -15,6 +15,7 @@ export const jobs = pgTable(
     location: varchar('location', { length: 200 }),
     description: text('description'),
     jobType: varchar('job_type', { length: 50 }),
+    workMode: varchar('work_mode', { length: 20 }),
     salaryRange: varchar('salary_range', { length: 100 }),
     bonusAmount: numeric('bonus_amount', { precision: 12, scale: 2 }),
     bonusCurrency: varchar('bonus_currency', { length: 10 }).default('USD'),

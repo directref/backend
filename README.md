@@ -34,7 +34,7 @@ npm run docker:up
 ```
 
 This starts PostgreSQL on port 5432 and Adminer (DB admin UI) on port 8080.
-Wait for the terminal to show `Container vouch_postgres Healthy`.
+Wait for the terminal to show `Container directref_postgres Healthy`.
 
 ### 5. Run migrations & seed data
 ```bash
@@ -68,7 +68,7 @@ API is now running at **http://localhost:3000**
 | http://localhost:3000/health | API health check |
 | http://localhost:8080 | Adminer DB admin UI |
 
-**Adminer login:** System: PostgreSQL · Server: `postgres` · User: `vouch` · Password: `vouch_pass` · DB: `vouch_db`
+**Adminer login:** System: PostgreSQL · Server: `postgres` · User: `directref` · Password: `directref_pass` · DB: `directref_db`
 
 ---
 
