@@ -76,6 +76,7 @@ export const resetPassword = asyncHandler(async (req: Request, res: Response) =>
 export const googleCallback = (req: Request, res: Response, next: NextFunction): void => {
   passport.authenticate('google', (err: unknown, user: Express.User | false) => {
     if (err || !user) {
+      console.error('[auth] Google OAuth failed:', err ?? '(no user returned)');
       return res.redirect(`${env.FRONTEND_URL}/auth/callback?error=oauth_failed`);
     }
     setAuthCookies(res, makeTokenPayload(user));
