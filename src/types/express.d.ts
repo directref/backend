@@ -11,6 +11,7 @@ declare global {
       headline: string | null;
       avatarUrl: string | null;
       googleId: string | null;
+      linkedinId: string | null;
       companyName: string | null;
       isReferrer: boolean;
       isSeeker: boolean;

@@ -20,6 +20,10 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().default(''),
   GOOGLE_CALLBACK_URL: z.string().default('http://localhost:3000/api/auth/google/callback'),
 
+  LINKEDIN_CLIENT_ID: z.string().default(''),
+  LINKEDIN_CLIENT_SECRET: z.string().default(''),
+  LINKEDIN_CALLBACK_URL: z.string().default('http://localhost:3000/api/auth/callback/linkedin'),
+
   RESEND_API_KEY: z.string().default(''),
   EMAIL_FROM: z.string().default('support@direct-ref.com'),
 

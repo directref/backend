@@ -11,6 +11,7 @@ export const users = pgTable(
     headline: varchar('headline', { length: 400 }),
     avatarUrl: text('avatar_url'),
     googleId: varchar('google_id', { length: 100 }).unique(),
+    linkedinId: varchar('linkedin_id', { length: 100 }).unique(),
     companyName: varchar('company_name', { length: 200 }),
     isReferrer: boolean('is_referrer').notNull().default(false),
     isSeeker: boolean('is_seeker').notNull().default(true),
@@ -31,6 +32,7 @@ export const users = pgTable(
   (t) => [
     uniqueIndex('users_email_idx').on(t.email),
     uniqueIndex('users_google_id_idx').on(t.googleId),
+    uniqueIndex('users_linkedin_id_idx').on(t.linkedinId),
     uniqueIndex('users_invite_code_idx').on(t.inviteCode),
     index('users_company_name_idx').on(t.companyName),
   ],
