@@ -43,6 +43,13 @@
       "when": 1785263451310,
       "tag": "0005_many_blizzard",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785576290776,
+      "tag": "0006_burly_krista_starr",
+      "breakpoints": true
     }
   ]
 }

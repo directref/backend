@@ -101,6 +101,45 @@ export async function resetPassword(token: string, newPassword: string): Promise
   }).where(eq(users.id, user.id));
 }
 
+/** Find-or-create a user from a verified LinkedIn OIDC profile, mirroring
+ *  the Google strategy's logic in config/passport.ts: match by provider id
+ *  first, then by email (linking the account), then create a new user. */
+export async function findOrCreateFromLinkedIn(profile: {
+  linkedinId: string;
+  email: string | null;
+  fullName: string;
+  avatarUrl: string | null;
+}): Promise<User> {
+  const [byLinkedinId] = await db.select().from(users).where(eq(users.linkedinId, profile.linkedinId)).limit(1);
+  if (byLinkedinId) {
+    await db.update(users).set({ avatarUrl: profile.avatarUrl, updatedAt: new Date() }).where(eq(users.id, byLinkedinId.id));
+    return byLinkedinId;
+  }
+
+  if (profile.email) {
+    const [byEmail] = await db.select().from(users).where(eq(users.email, profile.email)).limit(1);
+    if (byEmail) {
+      await db.update(users).set({
+        linkedinId: profile.linkedinId,
+        avatarUrl: profile.avatarUrl,
+        emailVerified: true,
+        updatedAt: new Date(),
+      }).where(eq(users.id, byEmail.id));
+      return byEmail;
+    }
+  }
+
+  const [newUser] = await db.insert(users).values({
+    email: profile.email ?? `linkedin_${profile.linkedinId}@placeholder.directref`,
+    fullName: profile.fullName,
+    linkedinId: profile.linkedinId,
+    avatarUrl: profile.avatarUrl,
+    emailVerified: true,
+  }).returning();
+
+  return newUser;
+}
+
 export async function getUserById(id: string): Promise<User> {
   const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
   if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
