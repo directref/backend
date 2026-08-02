@@ -43,9 +43,67 @@ function htmlToStructuredText(html: string): string {
 }
 
 /**
+ * Many companies embed a Greenhouse job board on their own domain
+ * (careers.company.com/?gh_jid=123, or boards.greenhouse.io/company/jobs/123
+ * directly). The actual job content on those pages is loaded client-side by
+ * JS after the initial HTML — a plain fetch() never sees it, only whatever
+ * generic company-wide blurb is in the page's static meta tags. Greenhouse's
+ * own public API has the real per-job content, so pull from there directly
+ * when we can identify the board token + job id.
+ */
+async function tryGreenhouse(url: string, html: string): Promise<ScrapedJob | null> {
+  let boardToken: string | undefined;
+  let jobId: string | undefined;
+
+  const directMatch = url.match(/(?:boards|job-boards)\.greenhouse\.io\/([a-z0-9_-]+)\/jobs\/(\d+)/i);
+  if (directMatch) {
+    [, boardToken, jobId] = directMatch;
+  } else {
+    // Embedded widget on the company's own domain — job id is in the URL's
+    // gh_jid param, board token has to be found somewhere in the page
+    // (the embed script/iframe src references it).
+    const jidMatch = url.match(/[?&]gh_jid=(\d+)/i);
+    const boardMatch = html.match(/greenhouse\.io\/([a-z0-9_-]+)\/jobs\/\d+/i)
+      ?? html.match(/boards\.greenhouse\.io\/([a-z0-9_-]+)/i);
+    if (jidMatch && boardMatch) {
+      jobId = jidMatch[1];
+      boardToken = boardMatch[1];
+    }
+  }
+
+  if (!boardToken || !jobId) return null;
+
+  try {
+    const res = await fetch(
+      `https://boards-api.greenhouse.io/v1/boards/${boardToken}/jobs/${jobId}?content=true`,
+      { timeout: 10000 },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      title?: string; company_name?: string; location?: { name?: string }; content?: string;
+    };
+    if (!data.title && !data.content) return null;
+
+    // Greenhouse's "content" field is HTML with its own tags/entities
+    // double-escaped (the string is literally "&lt;p&gt;...") — decode once
+    // to get real tags before running the normal HTML→structured-text pass.
+    return {
+      title: data.title ?? undefined,
+      companyName: data.company_name ?? undefined,
+      location: data.location?.name ?? undefined,
+      description: data.content ? htmlToStructuredText(decodeEntities(data.content)).slice(0, 20_000) : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Extracts job metadata from a URL.
- * Tries structured JSON-LD first (most accurate), then Open Graph tags,
- * then falls back to page title heuristics. Never throws.
+ * Tries a Greenhouse API lookup first when the page is a Greenhouse board
+ * (most complete, since it bypasses whatever the static HTML does or
+ * doesn't contain), then structured JSON-LD, then Open Graph tags, then
+ * falls back to page title heuristics. Never throws.
  */
 export async function scrapeJobUrl(url: string): Promise<ScrapedJob> {
   try {
@@ -62,6 +120,10 @@ export async function scrapeJobUrl(url: string): Promise<ScrapedJob> {
     if (!res.ok) return {};
 
     const html = await res.text();
+
+    // ── 0. Greenhouse-embedded board (see tryGreenhouse) ─────────────────────
+    const greenhouse = await tryGreenhouse(url, html);
+    if (greenhouse) return greenhouse;
 
     // ── 1. JSON-LD structured data (most reliable) ──────────────────────────
     const jsonLdMatches = html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
