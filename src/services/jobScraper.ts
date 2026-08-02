@@ -47,7 +47,7 @@ export async function scrapeJobUrl(url: string): Promise<ScrapedJob> {
               ? [locality, country].filter(Boolean).join(', ')
               : undefined,
             description: job.description
-              ? job.description.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 800)
+              ? job.description.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 20_000)
               : undefined,
             jobType: job.employmentType?.toLowerCase().replace('_', '-') ?? undefined,
           };
@@ -109,7 +109,7 @@ export async function scrapeJobUrl(url: string): Promise<ScrapedJob> {
     return {
       title:       title || undefined,
       companyName: companyName || undefined,
-      description: ogDesc?.slice(0, 800) || undefined,
+      description: ogDesc?.slice(0, 20_000) || undefined,
     };
   } catch {
     return {};

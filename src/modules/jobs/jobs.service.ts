@@ -1,6 +1,6 @@
 import { db } from '../../config/db';
 import { jobs, connections, users } from '../../db/schema';
-import { eq, and, or, ilike, desc, inArray, ne } from 'drizzle-orm';
+import { eq, and, or, ilike, desc, inArray, ne, sql } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler';
 import { scrapeJobUrl } from '../../services/jobScraper';
 import { getResponseStatsForReferrers, type ResponseStats } from '../applications/applications.service';
@@ -96,14 +96,29 @@ const referrerSelect = {
   companyName: users.companyName,
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Get a single job (grouped with every other active posting of the same
- *  real-world listing, i.e. same sourceUrl, by any referrer) */
-export async function getJobById(jobId: string): Promise<GroupedJob> {
+ *  real-world listing, i.e. same sourceUrl, by any referrer).
+ *
+ *  Accepts either the real UUID (old links keep working) or the frontend's
+ *  slug URL ("some-job-title-{8 hex chars}") — the trailing 8 hex chars are
+ *  matched against the id, no separate slug column needed. */
+export async function getJobById(idOrSlug: string): Promise<GroupedJob> {
+  const suffix = idOrSlug.match(/([0-9a-f]{8})$/i)?.[1];
+  const whereClause = UUID_RE.test(idOrSlug)
+    ? eq(jobs.id, idOrSlug)
+    : suffix
+      ? sql`replace(${jobs.id}::text, '-', '') ILIKE ${'%' + suffix}`
+      : undefined;
+
+  if (!whereClause) throw new AppError(404, 'JOB_NOT_FOUND', 'Job not found');
+
   const [row] = await db
     .select({ job: jobs, referrer: referrerSelect })
     .from(jobs)
     .innerJoin(users, eq(users.id, jobs.referrerId))
-    .where(eq(jobs.id, jobId))
+    .where(whereClause)
     .limit(1);
 
   if (!row) throw new AppError(404, 'JOB_NOT_FOUND', 'Job not found');
