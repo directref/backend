@@ -10,6 +10,7 @@ export const UpdateProfileSchema = z.object({
   onboarded: z.boolean().optional(),
   desiredRole: z.string().max(200).optional().nullable(),
   preferredLocation: z.string().max(200).optional().nullable(),
+  yearsOfExperience: z.number().int().min(0).max(60).optional().nullable(),
 });
 
 export const SearchUsersSchema = z.object({

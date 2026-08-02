@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, text, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, text, integer, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const users = pgTable(
@@ -22,6 +22,7 @@ export const users = pgTable(
     // Job-matching preferences (seeker)
     desiredRole: varchar('desired_role', { length: 200 }),
     preferredLocation: varchar('preferred_location', { length: 200 }),
+    yearsOfExperience: integer('years_of_experience'),
     // Onboarding + invite
     onboarded: boolean('onboarded').notNull().default(false),
     inviteCode: varchar('invite_code', { length: 16 }).unique(),
