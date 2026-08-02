@@ -8,6 +8,40 @@ export interface ScrapedJob {
   jobType?: string;
 }
 
+const HTML_ENTITIES: Record<string, string> = {
+  '&amp;': '&', '&nbsp;': ' ', '&lt;': '<', '&gt;': '>',
+  '&quot;': '"', '&#39;': "'", '&apos;': "'", '&#x27;': "'",
+  '&mdash;': '—', '&ndash;': '–', '&rsquo;': '’', '&lsquo;': '‘',
+  '&rdquo;': '”', '&ldquo;': '“',
+};
+
+function decodeEntities(s: string): string {
+  return s.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&amp;|&nbsp;|&lt;|&gt;|&quot;|&#39;|&apos;|&#x27;|&mdash;|&ndash;|&rsquo;|&lsquo;|&rdquo;|&ldquo;/g, (m) => HTML_ENTITIES[m] ?? m);
+}
+
+/**
+ * Converts a job description's HTML into structured plain text instead of
+ * flattening everything to one line: list items become "• " prefixed lines,
+ * paragraph/block boundaries become blank lines. The frontend renders this
+ * back into real <ul>/<li>/<p> — preserving structure here is what makes
+ * that possible, instead of one undifferentiated blob of text.
+ */
+function htmlToStructuredText(html: string): string {
+  let s = html;
+  s = s.replace(/<li[^>]*>/gi, '\n• ');
+  s = s.replace(/<\/li>/gi, '');
+  s = s.replace(/<br\s*\/?>/gi, '\n');
+  s = s.replace(/<(p|div|h[1-6]|ul|ol)[^>]*>/gi, '\n\n');
+  s = s.replace(/<\/(p|div|h[1-6]|ul|ol)>/gi, '\n\n');
+  s = s.replace(/<[^>]+>/g, ''); // strip remaining tags (<strong>, <em>, <span>, etc.)
+  s = decodeEntities(s);
+  s = s.replace(/[ \t]+/g, ' '); // collapse horizontal whitespace only — keep line breaks
+  s = s.split('\n').map((line) => line.trim()).join('\n');
+  s = s.replace(/\n{3,}/g, '\n\n'); // cap at one blank line between blocks
+  return s.trim();
+}
+
 /**
  * Extracts job metadata from a URL.
  * Tries structured JSON-LD first (most accurate), then Open Graph tags,
@@ -47,7 +81,7 @@ export async function scrapeJobUrl(url: string): Promise<ScrapedJob> {
               ? [locality, country].filter(Boolean).join(', ')
               : undefined,
             description: job.description
-              ? job.description.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 20_000)
+              ? htmlToStructuredText(job.description).slice(0, 20_000)
               : undefined,
             jobType: job.employmentType?.toLowerCase().replace('_', '-') ?? undefined,
           };
