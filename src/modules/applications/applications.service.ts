@@ -163,7 +163,13 @@ export async function getInbox(referrerId: string, status: string | undefined, p
         cvSizeBytes: applications.cvSizeBytes,
       },
       job: { id: jobs.id, title: jobs.title, companyName: jobs.companyName },
-      seeker: { id: users.id, fullName: users.fullName, avatarUrl: users.avatarUrl, headline: users.headline },
+      seeker: {
+        id: users.id,
+        fullName: users.fullName,
+        avatarUrl: users.avatarUrl,
+        headline: users.headline,
+        yearsOfExperience: users.yearsOfExperience,
+      },
     })
     .from(applications)
     .innerJoin(jobs, eq(jobs.id, applications.jobId))
@@ -219,7 +225,7 @@ export async function getApplicationById(applicationId: string, userId: string) 
   return { ...row, application: safeApplication };
 }
 
-export async function updateStatus(applicationId: string, referrerId: string, status: 'viewed' | 'rejected') {
+export async function updateStatus(applicationId: string, referrerId: string, status: 'viewed' | 'forwarded' | 'rejected') {
   const [app] = await db.select().from(applications).where(eq(applications.id, applicationId)).limit(1);
   if (!app) throw new AppError(404, 'NOT_FOUND', 'Application not found');
   if (app.referrerId !== referrerId) throw new AppError(403, 'FORBIDDEN', 'Access denied');
@@ -230,22 +236,33 @@ export async function updateStatus(applicationId: string, referrerId: string, st
       status,
       updatedAt: new Date(),
       ...(status === 'viewed' && !app.viewedAt ? { viewedAt: new Date() } : {}),
+      ...(status === 'forwarded' && !app.forwardedAt ? { forwardedAt: new Date() } : {}),
     })
     .where(eq(applications.id, applicationId))
     .returning();
 
-  // Notify seeker when declined
-  if (status === 'rejected') {
+  // Notify seeker of the referrer's decision — both terminal outcomes (accepted/downloaded or not a fit)
+  if (status === 'rejected' || status === 'forwarded') {
     const [job]      = await db.select().from(jobs).where(eq(jobs.id, app.jobId)).limit(1);
     const [referrer] = await db.select().from(users).where(eq(users.id, referrerId)).limit(1);
     if (job && referrer) {
-      createNotification(
-        app.seekerId,
-        'cv_rejected',
-        `${referrer.fullName} couldn't move forward with your CV`,
-        `Your application for ${job.title} at ${job.companyName} wasn't the right fit this time.`,
-        `${env.FRONTEND_URL}/applications`,
-      ).catch(() => {});
+      if (status === 'rejected') {
+        createNotification(
+          app.seekerId,
+          'cv_rejected',
+          `${referrer.fullName} couldn't move forward with your CV`,
+          `Your application for ${job.title} at ${job.companyName} wasn't the right fit this time.`,
+          `${env.FRONTEND_URL}/applications`,
+        ).catch(() => {});
+      } else {
+        createNotification(
+          app.seekerId,
+          'cv_forwarded',
+          `${referrer.fullName} moved your CV forward`,
+          `Your application for ${job.title} at ${job.companyName} was accepted — they'll be applying with your CV.`,
+          `${env.FRONTEND_URL}/applications`,
+        ).catch(() => {});
+      }
     }
   }
 

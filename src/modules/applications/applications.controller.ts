@@ -3,6 +3,7 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import * as appService from './applications.service';
 import { parsePagination } from '../../utils/pagination';
 import { AppError } from '../../middleware/errorHandler';
+import { env } from '../../config/env';
 
 export const submitApplication = asyncHandler(async (req: Request, res: Response) => {
   if (!req.file) throw new AppError(400, 'FILE_REQUIRED', 'CV file is required');
@@ -48,6 +49,11 @@ export const previewCV = asyncHandler(async (req: Request, res: Response) => {
   // Serve inline so the browser displays it rather than downloading
   res.setHeader('Content-Type', mimeType);
   res.setHeader('Content-Disposition', 'inline');
+  // This is the one endpoint meant to be embedded in an <iframe> — by our own
+  // frontend's CV preview modal, cross-origin in dev. Helmet's default CSP
+  // sends frame-ancestors 'self', which blocks that; scope the override to
+  // just this response rather than relaxing it app-wide.
+  res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${env.FRONTEND_URL}`);
   res.sendFile(filePath);
 });
 

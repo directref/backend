@@ -6,7 +6,7 @@ export const SubmitApplicationSchema = z.object({
 });
 
 export const UpdateStatusSchema = z.object({
-  status: z.enum(['viewed', 'rejected']),
+  status: z.enum(['viewed', 'forwarded', 'rejected']),
 });
 
 export const ForwardToHRSchema = z.object({
