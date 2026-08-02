@@ -12,7 +12,7 @@ export const authLimiter = rateLimit({
 /** Relaxed limit for general API */
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 1500,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: { code: 'RATE_LIMITED', message: 'Too many requests. Please slow down.' } },
