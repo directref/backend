@@ -64,6 +64,13 @@
       "when": 1785660866491,
       "tag": "0008_yellow_nomad",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785680182738,
+      "tag": "0009_lethal_miracleman",
+      "breakpoints": true
     }
   ]
 }

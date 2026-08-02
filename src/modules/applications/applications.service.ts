@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import { db } from '../../config/db';
 import { applications, applicationMessages, jobs, users } from '../../db/schema';
-import { eq, and, desc, ne } from 'drizzle-orm';
+import { eq, and, desc, ne, inArray, isNotNull } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler';
 import { areFriends } from '../connections/connections.service';
 import { createNotification } from '../notifications/notifications.service';
@@ -30,11 +30,17 @@ export async function submitApplication(
     throw new AppError(400, 'SELF_APPLICATION', 'You cannot apply to your own job posting');
   }
 
-  // 3. No duplicate applications
+  // 3. No duplicate applications — across this exact posting AND any sibling
+  //    posting of the same real-world listing (same sourceUrl) by a different
+  //    referrer. Picking another referrer on what's visually the same grouped
+  //    card still counts as "already applied" to that job.
+  const siblingJobs = await db.select({ id: jobs.id }).from(jobs).where(eq(jobs.sourceUrl, job.sourceUrl));
+  const siblingJobIds = siblingJobs.map((j) => j.id);
+
   const [existing] = await db
     .select()
     .from(applications)
-    .where(and(eq(applications.jobId, dto.jobId), eq(applications.seekerId, seekerId)))
+    .where(and(inArray(applications.jobId, siblingJobIds), eq(applications.seekerId, seekerId)))
     .limit(1);
 
   if (existing) {
@@ -80,6 +86,63 @@ export async function submitApplication(
   }
 
   return application;
+}
+
+// ── Response-time scoring ────────────────────────────────────────────────────
+// "Response time" = time from the seeker clicking Send (applications.createdAt)
+// to the referrer downloading/opening the CV (applications.viewedAt) — the
+// moment we assume they've actually looked at it. Not tracked past that point.
+//
+// Hours → 0-100 score, banded so it can be colored in the UI:
+//   0–24h  → green,  score 80–100
+//   24–48h → orange, score 50–80
+//   >48h   → red,    score 0–50 (floors at 0 by 96h)
+// Slower average response = lower score, by design.
+
+export type ResponseBand = 'green' | 'orange' | 'red';
+export interface ResponseStats {
+  score: number;
+  band: ResponseBand;
+  avgHours: number;
+}
+
+function computeResponseScore(hours: number): { score: number; band: ResponseBand } {
+  let score: number;
+  if (hours <= 24) score = 100 - (hours / 24) * 20;
+  else if (hours <= 48) score = 80 - ((hours - 24) / 24) * 30;
+  else score = Math.max(0, 50 - ((hours - 48) / 48) * 50);
+  score = Math.round(score);
+  const band: ResponseBand = score >= 80 ? 'green' : score >= 50 ? 'orange' : 'red';
+  return { score, band };
+}
+
+/** Average response score per referrer, from every application of theirs that's
+ *  been viewed. Referrers with no viewed applications yet are simply absent
+ *  from the returned map — there's no track record to score. */
+export async function getResponseStatsForReferrers(referrerIds: string[]): Promise<Map<string, ResponseStats>> {
+  const result = new Map<string, ResponseStats>();
+  if (referrerIds.length === 0) return result;
+
+  const rows = await db
+    .select({ referrerId: applications.referrerId, createdAt: applications.createdAt, viewedAt: applications.viewedAt })
+    .from(applications)
+    .where(and(inArray(applications.referrerId, referrerIds), isNotNull(applications.viewedAt)));
+
+  const hoursByReferrer = new Map<string, number[]>();
+  for (const row of rows) {
+    if (!row.viewedAt) continue;
+    const hours = (row.viewedAt.getTime() - row.createdAt.getTime()) / 3_600_000;
+    const list = hoursByReferrer.get(row.referrerId) ?? [];
+    list.push(hours);
+    hoursByReferrer.set(row.referrerId, list);
+  }
+
+  for (const [referrerId, hoursList] of hoursByReferrer) {
+    const avgHours = hoursList.reduce((a, b) => a + b, 0) / hoursList.length;
+    const { score, band } = computeResponseScore(avgHours);
+    result.set(referrerId, { score, band, avgHours });
+  }
+  return result;
 }
 
 /** Referrer's inbox — CVs they received */
@@ -163,7 +226,11 @@ export async function updateStatus(applicationId: string, referrerId: string, st
 
   const [updated] = await db
     .update(applications)
-    .set({ status, updatedAt: new Date() })
+    .set({
+      status,
+      updatedAt: new Date(),
+      ...(status === 'viewed' && !app.viewedAt ? { viewedAt: new Date() } : {}),
+    })
     .where(eq(applications.id, applicationId))
     .returning();
 
@@ -256,7 +323,7 @@ export async function getCVPreviewPath(applicationId: string, userId: string): P
   // Auto-mark as viewed when referrer previews
   if (app.referrerId === userId && app.status === 'submitted') {
     db.update(applications)
-      .set({ status: 'viewed', updatedAt: new Date() })
+      .set({ status: 'viewed', viewedAt: new Date(), updatedAt: new Date() })
       .where(eq(applications.id, applicationId))
       .execute()
       .then(async () => {
@@ -290,7 +357,7 @@ export async function getCVPath(applicationId: string, userId: string): Promise<
   // Auto-mark as viewed when referrer downloads — and notify the seeker
   if (app.referrerId === userId && app.status === 'submitted') {
     db.update(applications)
-      .set({ status: 'viewed', updatedAt: new Date() })
+      .set({ status: 'viewed', viewedAt: new Date(), updatedAt: new Date() })
       .where(eq(applications.id, applicationId))
       .execute()
       .then(async () => {

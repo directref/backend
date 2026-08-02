@@ -25,6 +25,7 @@ export const applications = pgTable(
     status: varchar('status', { length: 30 }).notNull().default('submitted'),
     referrerNote: text('referrer_note'),
     hrEmail: varchar('hr_email', { length: 320 }),
+    viewedAt: timestamp('viewed_at', { withTimezone: true }),
     forwardedAt: timestamp('forwarded_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(sql`now()`),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
