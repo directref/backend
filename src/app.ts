@@ -22,6 +22,7 @@ import notificationsRouter from './modules/notifications/notifications.router';
 import invitesRouter from './modules/invites/invites.router';
 import savedJobsRouter from './modules/savedJobs/savedJobs.router';
 import adminRouter from './modules/admin/admin.router';
+import creditsRouter from './modules/credits/credits.router';
 
 // Ensure uploads directory exists
 const uploadDir = path.join(process.cwd(), env.UPLOADS_DIR, 'cvs');
@@ -102,6 +103,7 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/invites', invitesRouter);
 app.use('/api/saved-jobs', savedJobsRouter);
 app.use('/api/admin',  adminRouter);
+app.use('/api/credits', creditsRouter);
 
 // ─── 404 handler ─────────────────────────────────────────────────────────────
 app.use((_req, res) => {

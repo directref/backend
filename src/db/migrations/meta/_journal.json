@@ -71,6 +71,13 @@
       "when": 1785680182738,
       "tag": "0009_lethal_miracleman",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785759838018,
+      "tag": "0010_colorful_amazoness",
+      "breakpoints": true
     }
   ]
 }

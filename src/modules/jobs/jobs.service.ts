@@ -4,6 +4,7 @@ import { eq, and, or, ilike, desc, inArray, ne, sql } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler';
 import { scrapeJobUrl } from '../../services/jobScraper';
 import { getResponseStatsForReferrers, type ResponseStats } from '../applications/applications.service';
+import { spendCredit } from '../credits/credits.service';
 import type { CreateJobDto, UpdateJobDto } from './jobs.schemas';
 
 type JobRow = typeof jobs.$inferSelect;
@@ -78,8 +79,10 @@ async function groupBySourceUrl(rows: JobReferrerRow[]): Promise<GroupedJob[]> {
   return grouped;
 }
 
-/** Create a new job posting */
+/** Create a new job posting — costs 1 credit, same shared balance as sending a C.V. */
 export async function createJob(referrerId: string, dto: CreateJobDto) {
+  await spendCredit(referrerId);
+
   const [job] = await db.insert(jobs).values({
     referrerId,
     ...dto,

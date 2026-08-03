@@ -8,6 +8,7 @@ import { areFriends } from '../connections/connections.service';
 import { createNotification } from '../notifications/notifications.service';
 import { sendCVNotificationEmail, sendForwardedToHREmail, sendCVViewedEmail, sendCVForwardedEmail } from '../../services/email';
 import { env } from '../../config/env';
+import { spendCredit } from '../credits/credits.service';
 import type { SubmitApplicationDto, ForwardToHRDto } from './applications.schemas';
 
 /** Submit a CV to a referrer for a specific job */
@@ -46,6 +47,15 @@ export async function submitApplication(
   if (existing) {
     fs.unlink(file.path, () => {});
     throw new AppError(409, 'ALREADY_APPLIED', 'You have already sent your CV for this job');
+  }
+
+  // 4. Spend a credit — free first, then purchased. Throws OUT_OF_CREDITS
+  //    (402) if the seeker has neither, same shared balance as posting a job.
+  try {
+    await spendCredit(seekerId);
+  } catch (err) {
+    fs.unlink(file.path, () => {});
+    throw err;
   }
 
   // 5. Insert application

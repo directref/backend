@@ -23,6 +23,13 @@ export const users = pgTable(
     desiredRole: varchar('desired_role', { length: 200 }),
     preferredLocation: varchar('preferred_location', { length: 200 }),
     yearsOfExperience: integer('years_of_experience'),
+    // Credits — 1 free credit per calendar month, shared balance for both
+    // sending a C.V. and posting a job. freeCreditsMonth is the 'YYYY-MM' the
+    // free credit was last reset for; freeCreditsUsed tracks whether that
+    // month's free credit has been spent. Purchased credits live in
+    // credit_purchases (their own expiry per purchase).
+    freeCreditsMonth: varchar('free_credits_month', { length: 7 }),
+    freeCreditsUsed: boolean('free_credits_used').notNull().default(false),
     // Onboarding + invite
     onboarded: boolean('onboarded').notNull().default(false),
     inviteCode: varchar('invite_code', { length: 16 }).unique(),
