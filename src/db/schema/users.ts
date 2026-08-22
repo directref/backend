@@ -23,6 +23,8 @@ export const users = pgTable(
     desiredRole: varchar('desired_role', { length: 200 }),
     preferredLocation: varchar('preferred_location', { length: 200 }),
     yearsOfExperience: integer('years_of_experience'),
+    employmentType: varchar('employment_type', { length: 20 }), // 'full-time' | 'part-time'
+    seniority: varchar('seniority', { length: 20 }), // 'junior' | 'mid' | 'senior' | 'lead' | 'manager'
     // Credits — 1 free credit per calendar month, shared balance for both
     // sending a C.V. and posting a job. freeCreditsMonth is the 'YYYY-MM' the
     // free credit was last reset for; freeCreditsUsed tracks whether that

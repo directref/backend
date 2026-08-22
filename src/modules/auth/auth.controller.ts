@@ -90,6 +90,25 @@ export const googleCallback = (req: Request, res: Response, next: NextFunction):
 // targets LinkedIn's old, now-retired scopes.
 
 const LINKEDIN_STATE_COOKIE = 'li_oauth_state';
+// Signed cookie carrying which account a "Connect" (not login) flow belongs
+// to. Set only by linkedinConnect — its presence on the callback is what
+// distinguishes "link this profile onto my existing account" from a normal
+// LinkedIn login/signup. We can't rely on the regular access_token cookie
+// for this: it's SameSite=Strict in production, so it wouldn't survive the
+// cross-site redirect back from linkedin.com. This cookie is SameSite=Lax
+// like the state cookie, so it does.
+const LINKEDIN_CONNECT_UID_COOKIE = 'li_oauth_connect_uid';
+
+function redirectToLinkedIn(res: Response, state: string): void {
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: env.LINKEDIN_CLIENT_ID,
+    redirect_uri: env.LINKEDIN_CALLBACK_URL,
+    scope: 'openid profile email',
+    state,
+  });
+  res.redirect(`https://www.linkedin.com/oauth/v2/authorization?${params.toString()}`);
+}
 
 export const linkedinLogin = (_req: Request, res: Response): void => {
   // Random, single-use value that round-trips through LinkedIn and back —
@@ -104,15 +123,30 @@ export const linkedinLogin = (_req: Request, res: Response): void => {
     signed: true,
   });
 
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: env.LINKEDIN_CLIENT_ID,
-    redirect_uri: env.LINKEDIN_CALLBACK_URL,
-    scope: 'openid profile email',
-    state,
+  redirectToLinkedIn(res, state);
+};
+
+/** Same handoff as linkedinLogin, but for a signed-in user connecting
+ *  LinkedIn from Settings — the callback links to req.user's account
+ *  instead of finding-or-creating one. */
+export const linkedinConnect = (req: Request, res: Response): void => {
+  const state = crypto.randomBytes(24).toString('hex');
+  res.cookie(LINKEDIN_STATE_COOKIE, state, {
+    httpOnly: true,
+    secure: env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 10 * 60 * 1000,
+    signed: true,
+  });
+  res.cookie(LINKEDIN_CONNECT_UID_COOKIE, req.user!.id, {
+    httpOnly: true,
+    secure: env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 10 * 60 * 1000,
+    signed: true,
   });
 
-  res.redirect(`https://www.linkedin.com/oauth/v2/authorization?${params.toString()}`);
+  redirectToLinkedIn(res, state);
 };
 
 interface LinkedInTokenResponse {
@@ -129,10 +163,17 @@ interface LinkedInUserInfo {
 export const linkedinCallback = asyncHandler(async (req: Request, res: Response) => {
   const { code, state, error } = req.query as { code?: string; state?: string; error?: string };
   const expectedState = req.signedCookies?.[LINKEDIN_STATE_COOKIE] as string | undefined;
+  const connectUserId = req.signedCookies?.[LINKEDIN_CONNECT_UID_COOKIE] as string | undefined;
   res.clearCookie(LINKEDIN_STATE_COOKIE);
+  res.clearCookie(LINKEDIN_CONNECT_UID_COOKIE);
+
+  // Connect-mode failures return to Settings; login-mode failures return to the login callback screen.
+  const failureUrl = connectUserId
+    ? `${env.FRONTEND_URL}/settings?linkedin=error`
+    : `${env.FRONTEND_URL}/auth/callback?error=oauth_failed`;
 
   if (error || !code || !state || !expectedState || state !== expectedState) {
-    res.redirect(`${env.FRONTEND_URL}/auth/callback?error=oauth_failed`);
+    res.redirect(failureUrl);
     return;
   }
 
@@ -157,6 +198,22 @@ export const linkedinCallback = asyncHandler(async (req: Request, res: Response)
     if (!profileRes.ok) throw new Error(`userinfo fetch failed: ${profileRes.status}`);
     const profile = (await profileRes.json()) as LinkedInUserInfo;
 
+    if (connectUserId) {
+      // Linking onto the already-authenticated account — never creates or
+      // switches accounts, and never touches the current session's cookies.
+      try {
+        await authService.linkLinkedInToUser(connectUserId, {
+          linkedinId: profile.sub,
+          avatarUrl: profile.picture ?? null,
+        });
+        res.redirect(`${env.FRONTEND_URL}/settings?linkedin=connected`);
+      } catch (linkErr) {
+        const reason = linkErr instanceof AppError && linkErr.code === 'LINKEDIN_ALREADY_LINKED' ? 'already_linked' : 'failed';
+        res.redirect(`${env.FRONTEND_URL}/settings?linkedin=error&reason=${reason}`);
+      }
+      return;
+    }
+
     const user = await authService.findOrCreateFromLinkedIn({
       linkedinId: profile.sub,
       email: profile.email?.toLowerCase() ?? null,
@@ -168,6 +225,6 @@ export const linkedinCallback = asyncHandler(async (req: Request, res: Response)
     res.redirect(`${env.FRONTEND_URL}/auth/callback?success=true`);
   } catch (err) {
     console.error('[auth] LinkedIn OAuth failed:', err);
-    res.redirect(`${env.FRONTEND_URL}/auth/callback?error=oauth_failed`);
+    res.redirect(failureUrl);
   }
 });

@@ -11,6 +11,11 @@ export const UpdateProfileSchema = z.object({
   desiredRole: z.string().max(200).optional().nullable(),
   preferredLocation: z.string().max(200).optional().nullable(),
   yearsOfExperience: z.number().int().min(0).max(60).optional().nullable(),
+  employmentType: z.enum(['full-time', 'part-time']).optional().nullable(),
+  seniority: z.enum(['junior', 'mid', 'senior', 'lead', 'manager']).optional().nullable(),
+  // Only allows clearing an OAuth-verified link — setting a real linkedinId
+  // must go through the LinkedIn OAuth connect flow, never this endpoint.
+  linkedinId: z.literal(null).optional(),
 });
 
 export const SearchUsersSchema = z.object({

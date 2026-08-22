@@ -26,8 +26,10 @@ router.post('/reset-password', validate(ResetPasswordSchema), ctrl.resetPassword
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'], session: false }));
 router.get('/google/callback', ctrl.googleCallback);
 
-// LinkedIn OAuth
+// LinkedIn OAuth — login/signup (anonymous)
 router.get('/linkedin', ctrl.linkedinLogin);
+// LinkedIn OAuth — connect to the current account (from Settings), not a login
+router.get('/linkedin/connect', requireAuth, ctrl.linkedinConnect);
 router.get('/callback/linkedin', ctrl.linkedinCallback);
 
 export default router;

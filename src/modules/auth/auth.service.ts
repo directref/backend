@@ -140,6 +140,28 @@ export async function findOrCreateFromLinkedIn(profile: {
   return newUser;
 }
 
+/** Link a verified LinkedIn profile to an already-authenticated user (the
+ *  Settings "Connect" flow) — never creates or switches accounts. Throws if
+ *  that LinkedIn identity is already linked to a different DirectRef user. */
+export async function linkLinkedInToUser(
+  userId: string,
+  profile: { linkedinId: string; avatarUrl: string | null },
+): Promise<User> {
+  const [existing] = await db.select().from(users).where(eq(users.linkedinId, profile.linkedinId)).limit(1);
+  if (existing && existing.id !== userId) {
+    throw new AppError(409, 'LINKEDIN_ALREADY_LINKED', 'This LinkedIn account is already linked to another DirectRef account');
+  }
+
+  const [updated] = await db.update(users).set({
+    linkedinId: profile.linkedinId,
+    avatarUrl: profile.avatarUrl,
+    updatedAt: new Date(),
+  }).where(eq(users.id, userId)).returning();
+
+  if (!updated) throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
+  return updated;
+}
+
 export async function getUserById(id: string): Promise<User> {
   const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
   if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
