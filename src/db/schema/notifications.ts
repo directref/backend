@@ -5,7 +5,7 @@ import { users } from './users';
 export const notifications = pgTable('notifications', {
   id:        uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   userId:    uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  type:      varchar('type', { length: 50 }).notNull(),  // 'cv_viewed' | 'cv_forwarded' | 'cv_received' | 'cv_rejected' | 'connection_request' | 'connection_accepted'
+  type:      varchar('type', { length: 50 }).notNull(),  // see NotificationType in notifications.service.ts
   title:     varchar('title', { length: 200 }).notNull(),
   body:      text('body').notNull(),
   linkUrl:   text('link_url'),

@@ -1,11 +1,13 @@
 import app from './app';
 import { env } from './config/env';
+import { startScheduler } from './scheduler';
 
 const server = app.listen(env.PORT, () => {
   console.log(`\n🚀 DirectRef API running on http://localhost:${env.PORT}`);
   console.log(`   Environment: ${env.NODE_ENV}`);
   console.log(`   Health:      http://localhost:${env.PORT}/health`);
-  console.log(`   DB Admin:    http://localhost:8080  (Adminer)\n`);
+  console.log(`   DB Admin:    http://localhost:8080  (Adminer)`);
+  startScheduler();
 });
 
 // Graceful shutdown

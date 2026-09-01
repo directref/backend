@@ -109,6 +109,32 @@ export async function spendCredit(userId: string): Promise<{ source: 'free' | 'p
   return { source: 'purchased' };
 }
 
+/**
+ * Refunds exactly one credit to the user's general balance (PRD: refunds
+ * aren't tagged by origin). If this month's free credit was the one spent,
+ * restore that; otherwise grant a purchased-style credit with a fresh
+ * 12-month expiry. Used by the Day-5 auto-cancel sweep.
+ */
+export async function refundCredit(userId: string): Promise<void> {
+  const free = await ensureFreeCreditMonth(userId);
+  if (free.freeCreditsUsed) {
+    await db.update(users).set({ freeCreditsUsed: false, updatedAt: new Date() }).where(eq(users.id, userId));
+    return;
+  }
+
+  const expiresAt = new Date();
+  expiresAt.setMonth(expiresAt.getMonth() + 12);
+  await db.insert(creditPurchases).values({
+    userId,
+    packageId: 'refund',
+    credits: 1,
+    remainingCredits: 1,
+    pricePaid: '0',
+    currency: 'ILS',
+    expiresAt,
+  });
+}
+
 /** Stubbed purchase — no real payment processor yet, grants credits immediately. */
 export async function purchaseCredits(userId: string, packageId: string): Promise<CreditBalance> {
   const pkg = CREDIT_PACKAGES.find((p) => p.id === packageId);

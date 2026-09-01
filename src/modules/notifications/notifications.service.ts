@@ -2,7 +2,16 @@ import { db } from '../../config/db';
 import { notifications } from '../../db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 
-export type NotificationType = 'cv_viewed' | 'cv_forwarded' | 'cv_received' | 'cv_rejected' | 'connection_request' | 'connection_accepted';
+export type NotificationType =
+  | 'cv_viewed'
+  | 'cv_forwarded'
+  | 'cv_received'
+  | 'cv_rejected'
+  | 'cv_reminder'   // Day 1 — nudges the referrer, who hasn't acted yet
+  | 'cv_escalated'  // Day 3 — tells the seeker their referrer hasn't responded
+  | 'cv_expired'    // Day 5 — application auto-closed, seeker's credit refunded
+  | 'connection_request'
+  | 'connection_accepted';
 
 /** Create a notification for a user */
 export async function createNotification(

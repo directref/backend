@@ -27,6 +27,11 @@ export const applications = pgTable(
     hrEmail: varchar('hr_email', { length: 320 }),
     viewedAt: timestamp('viewed_at', { withTimezone: true }),
     forwardedAt: timestamp('forwarded_at', { withTimezone: true }),
+    // Escalation ladder (Day 1 / Day 3 / Day 5) — each set once, the first
+    // time the scheduled sweep crosses that threshold for this application.
+    reminderSentAt: timestamp('reminder_sent_at', { withTimezone: true }),
+    escalatedAt: timestamp('escalated_at', { withTimezone: true }),
+    autoCancelledAt: timestamp('auto_cancelled_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(sql`now()`),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
   },
@@ -37,7 +42,9 @@ export const applications = pgTable(
     index('applications_referrer_status_idx').on(t.referrerId, t.status),
     check(
       'applications_status_check',
-      sql`${t.status} IN ('submitted', 'viewed', 'forwarded', 'rejected')`,
+      // 'expired' — set only by the escalation sweep when a referrer hasn't
+      // acted by Day 5; never user-settable via the status PATCH endpoint.
+      sql`${t.status} IN ('submitted', 'viewed', 'forwarded', 'rejected', 'expired')`,
     ),
   ],
 );
