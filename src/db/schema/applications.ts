@@ -27,10 +27,18 @@ export const applications = pgTable(
     hrEmail: varchar('hr_email', { length: 320 }),
     viewedAt: timestamp('viewed_at', { withTimezone: true }),
     forwardedAt: timestamp('forwarded_at', { withTimezone: true }),
-    // Escalation ladder (Day 1 / Day 3 / Day 5) — each set once, the first
-    // time the scheduled sweep crosses that threshold for this application.
+    // Clock A — from CV sent, while status is submitted/viewed. Day 1 first
+    // reminder, Day 2 stronger reminder (escalatedAt — name predates this
+    // meaning but the column is reused rather than migrated for a rename),
+    // Day 5 auto-cancel.
     reminderSentAt: timestamp('reminder_sent_at', { withTimezone: true }),
     escalatedAt: timestamp('escalated_at', { withTimezone: true }),
+    // Clock B — from download (forwardedAt), while status is forwarded and
+    // internal submission hasn't been confirmed yet. Day 2 reminder, Day 3
+    // final reminder, Day 5 auto-cancel (shares autoCancelledAt with Clock A
+    // since a given application can only ever be processed by one clock).
+    submitReminderSentAt: timestamp('submit_reminder_sent_at', { withTimezone: true }),
+    submitFollowupSentAt: timestamp('submit_followup_sent_at', { withTimezone: true }),
     autoCancelledAt: timestamp('auto_cancelled_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(sql`now()`),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
@@ -44,7 +52,10 @@ export const applications = pgTable(
       'applications_status_check',
       // 'expired' — set only by the escalation sweep when a referrer hasn't
       // acted by Day 5; never user-settable via the status PATCH endpoint.
-      sql`${t.status} IN ('submitted', 'viewed', 'forwarded', 'rejected', 'expired')`,
+      // 'internally_submitted' — referrer confirms they submitted a
+      // downloaded CV into their company's internal system; only reachable
+      // from 'forwarded' (enforced in the service layer, not here).
+      sql`${t.status} IN ('submitted', 'viewed', 'forwarded', 'rejected', 'expired', 'internally_submitted')`,
     ),
   ],
 );

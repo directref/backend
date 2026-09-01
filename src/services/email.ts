@@ -12,6 +12,15 @@ const brand = {
   name: 'DirectRef',
 };
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function btn(href: string, label: string) {
   return `<a href="${href}" style="display:inline-block;background:${brand.gold};color:${brand.ink};padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-family:system-ui,sans-serif;">${label}</a>`;
 }
@@ -169,7 +178,7 @@ export async function sendForwardedToHREmail(
   });
 }
 
-// ── Escalation ladder: Day 1 reminder, Day 3 seeker notice, Day 5 auto-cancel ──
+// ── Clock A — Day 1 reminder, Day 2 stronger reminder, Day 5 auto-cancel ──────
 
 /** Day 1 — nudges the referrer that a CV is still waiting on them. */
 export async function sendReminderEmail(
@@ -196,35 +205,36 @@ export async function sendReminderEmail(
   });
 }
 
-/** Day 3 — tells the seeker their referrer hasn't acted yet. Not silence — an honest status update. */
-export async function sendEscalationEmail(
-  seekerEmail: string,
-  seekerName: string,
+/** Day 2 — a stronger nudge to the referrer, now with a deadline attached. */
+export async function sendSecondReminderEmail(
+  referrerEmail: string,
   referrerName: string,
+  seekerName: string,
   jobTitle: string,
   companyName: string,
-  applicationsUrl: string,
+  inboxUrl: string,
 ): Promise<void> {
   await resend.emails.send({
     from: env.EMAIL_FROM,
-    to: seekerEmail,
-    subject: `Still waiting to hear from ${referrerName}`,
+    to: referrerEmail,
+    subject: `${seekerName}'s CV resets in 3 days — please respond`,
     html: layout(`
-      <h2 style="margin:0 0 8px;">No word yet, ${seekerName}</h2>
+      <h2 style="margin:0 0 8px;">This one's about to reset</h2>
       <p style="color:#555;">
-        <strong>${referrerName}</strong> hasn't responded to your CV for
-        <strong>${jobTitle}</strong> at <strong>${companyName}</strong> yet. We've sent them a reminder.
+        It's been 2 days since <strong>${seekerName}</strong> sent their CV for
+        <strong>${jobTitle}</strong> at <strong>${companyName}</strong>, and there's still no decision.
       </p>
       <p style="color:#555;">
-        If it's been a while, you can message them directly — or just wait it out. If there's still no
-        response by day 5, this application closes automatically and your credit is refunded.
+        <strong>3 more days</strong> and this application resets automatically, refunding their credit.
+        A quick "not a fit" is fine too — they just need an answer.
       </p>
-      ${btn(applicationsUrl, 'Message or View Application')}
+      ${btn(inboxUrl, 'Review the CV')}
     `),
   });
 }
 
-/** Day 5 — the application auto-closed with no response; the seeker's credit is refunded. */
+/** Day 5 — the application auto-closed with no response; the seeker's credit is refunded.
+ *  Reused by both clocks (never looked at it, or downloaded but never confirmed). */
 export async function sendExpiredEmail(
   seekerEmail: string,
   seekerName: string,
@@ -246,6 +256,129 @@ export async function sendExpiredEmail(
       </p>
       <p style="color:#555;"><strong>Your credit has been refunded</strong> — use it on another role whenever you're ready.</p>
       ${btn(applicationsUrl, 'Browse Other Roles')}
+    `),
+  });
+}
+
+// ── Clock B — from download: seeker notice, Day 2 / Day 3 submit reminders ────
+
+/** The referrer downloaded the CV — tell the seeker. */
+export async function sendCVDownloadedEmail(
+  seekerEmail: string,
+  seekerName: string,
+  referrerName: string,
+  jobTitle: string,
+  companyName: string,
+  applicationsUrl: string,
+): Promise<void> {
+  await resend.emails.send({
+    from: env.EMAIL_FROM,
+    to: seekerEmail,
+    subject: `${referrerName} downloaded your CV`,
+    html: layout(`
+      <h2 style="margin:0 0 8px;">Good sign, ${seekerName}!</h2>
+      <p style="color:#555;">
+        <strong>${referrerName}</strong> downloaded your CV for
+        <strong>${jobTitle}</strong> at <strong>${companyName}</strong> — they're moving forward with it.
+      </p>
+      <p style="color:#555;">We'll let you know as soon as it's submitted into their internal system.</p>
+      ${btn(applicationsUrl, 'View My Applications')}
+    `),
+  });
+}
+
+/** Day 2 from download — ask the referrer whether they submitted it internally. */
+export async function sendSubmitReminderEmail(
+  referrerEmail: string,
+  referrerName: string,
+  seekerName: string,
+  jobTitle: string,
+  companyName: string,
+  inboxUrl: string,
+): Promise<void> {
+  await resend.emails.send({
+    from: env.EMAIL_FROM,
+    to: referrerEmail,
+    subject: `Did you submit ${seekerName}'s CV internally yet?`,
+    html: layout(`
+      <h2 style="margin:0 0 8px;">Quick check-in</h2>
+      <p style="color:#555;">
+        You downloaded <strong>${seekerName}</strong>'s CV for
+        <strong>${jobTitle}</strong> at <strong>${companyName}</strong> a couple of days ago.
+        Once it's in your company's system, let them know — it only takes a click.
+      </p>
+      ${btn(inboxUrl, 'Confirm Submission')}
+    `),
+  });
+}
+
+/** Day 3 from download — a final reminder before this heads toward auto-cancel. */
+export async function sendSubmitFollowupEmail(
+  referrerEmail: string,
+  referrerName: string,
+  seekerName: string,
+  jobTitle: string,
+  companyName: string,
+  inboxUrl: string,
+): Promise<void> {
+  await resend.emails.send({
+    from: env.EMAIL_FROM,
+    to: referrerEmail,
+    subject: `Last check: did ${seekerName}'s CV get submitted?`,
+    html: layout(`
+      <h2 style="margin:0 0 8px;">Still waiting to hear back from you</h2>
+      <p style="color:#555;">
+        <strong>${seekerName}</strong>'s CV for <strong>${jobTitle}</strong> at
+        <strong>${companyName}</strong> is still marked as downloaded, not submitted.
+      </p>
+      <p style="color:#555;"><strong>2 more days</strong> and this resets automatically, refunding their credit.</p>
+      ${btn(inboxUrl, 'Confirm Submission')}
+    `),
+  });
+}
+
+/** The referrer confirmed the CV was submitted into their internal system. */
+export async function sendInternallySubmittedEmail(
+  seekerEmail: string,
+  seekerName: string,
+  referrerName: string,
+  jobTitle: string,
+  companyName: string,
+  applicationsUrl: string,
+): Promise<void> {
+  await resend.emails.send({
+    from: env.EMAIL_FROM,
+    to: seekerEmail,
+    subject: `Your CV was submitted internally at ${companyName}`,
+    html: layout(`
+      <h2 style="margin:0 0 8px;">Great news, ${seekerName}!</h2>
+      <p style="color:#555;">
+        <strong>${referrerName}</strong> confirmed your CV for
+        <strong>${jobTitle}</strong> at <strong>${companyName}</strong> has been submitted into their
+        internal system. Good luck!
+      </p>
+      ${btn(applicationsUrl, 'View My Applications')}
+    `),
+  });
+}
+
+// ── Messaging ───────────────────────────────────────────────────────────────
+
+export async function sendNewMessageEmail(
+  recipientEmail: string,
+  recipientName: string,
+  senderName: string,
+  preview: string,
+  threadUrl: string,
+): Promise<void> {
+  await resend.emails.send({
+    from: env.EMAIL_FROM,
+    to: recipientEmail,
+    subject: `${senderName} sent you a message`,
+    html: layout(`
+      <h2 style="margin:0 0 8px;">New message from ${escapeHtml(senderName)}</h2>
+      <p style="color:#555;font-style:italic;">"${escapeHtml(preview)}"</p>
+      ${btn(threadUrl, 'Reply')}
     `),
   });
 }

@@ -6,7 +6,15 @@ import { eq, and, desc, ne, inArray, isNotNull } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler';
 import { areFriends } from '../connections/connections.service';
 import { createNotification } from '../notifications/notifications.service';
-import { sendCVNotificationEmail, sendForwardedToHREmail, sendCVViewedEmail, sendCVForwardedEmail } from '../../services/email';
+import {
+  sendCVNotificationEmail,
+  sendForwardedToHREmail,
+  sendCVViewedEmail,
+  sendCVForwardedEmail,
+  sendCVDownloadedEmail,
+  sendInternallySubmittedEmail,
+  sendNewMessageEmail,
+} from '../../services/email';
 import { env } from '../../config/env';
 import { spendCredit } from '../credits/credits.service';
 import type { SubmitApplicationDto, ForwardToHRDto } from './applications.schemas';
@@ -235,10 +243,19 @@ export async function getApplicationById(applicationId: string, userId: string) 
   return { ...row, application: safeApplication };
 }
 
-export async function updateStatus(applicationId: string, referrerId: string, status: 'viewed' | 'forwarded' | 'rejected') {
+export async function updateStatus(
+  applicationId: string,
+  referrerId: string,
+  status: 'viewed' | 'forwarded' | 'rejected' | 'internally_submitted',
+) {
   const [app] = await db.select().from(applications).where(eq(applications.id, applicationId)).limit(1);
   if (!app) throw new AppError(404, 'NOT_FOUND', 'Application not found');
   if (app.referrerId !== referrerId) throw new AppError(403, 'FORBIDDEN', 'Access denied');
+  // Confirming internal submission only makes sense after the CV was actually
+  // downloaded — that's what starts Clock B in the first place.
+  if (status === 'internally_submitted' && app.status !== 'forwarded') {
+    throw new AppError(400, 'NOT_DOWNLOADED', 'Download the CV before confirming internal submission');
+  }
 
   const [updated] = await db
     .update(applications)
@@ -251,27 +268,41 @@ export async function updateStatus(applicationId: string, referrerId: string, st
     .where(eq(applications.id, applicationId))
     .returning();
 
-  // Notify seeker of the referrer's decision — both terminal outcomes (accepted/downloaded or not a fit)
-  if (status === 'rejected' || status === 'forwarded') {
+  // Notify seeker of the referrer's decision
+  if (status === 'rejected' || status === 'forwarded' || status === 'internally_submitted') {
     const [job]      = await db.select().from(jobs).where(eq(jobs.id, app.jobId)).limit(1);
     const [referrer] = await db.select().from(users).where(eq(users.id, referrerId)).limit(1);
-    if (job && referrer) {
+    const [seeker]   = await db.select().from(users).where(eq(users.id, app.seekerId)).limit(1);
+    if (job && referrer && seeker) {
+      const appsUrl = `${env.FRONTEND_URL}/applications`;
       if (status === 'rejected') {
         createNotification(
           app.seekerId,
           'cv_rejected',
           `${referrer.fullName} couldn't move forward with your CV`,
           `Your application for ${job.title} at ${job.companyName} wasn't the right fit this time.`,
-          `${env.FRONTEND_URL}/applications`,
+          appsUrl,
         ).catch(() => {});
-      } else {
+      } else if (status === 'forwarded') {
         createNotification(
           app.seekerId,
           'cv_forwarded',
-          `${referrer.fullName} moved your CV forward`,
+          `${referrer.fullName} downloaded your CV`,
           `Your application for ${job.title} at ${job.companyName} was accepted — they'll be applying with your CV.`,
-          `${env.FRONTEND_URL}/applications`,
+          appsUrl,
         ).catch(() => {});
+        sendCVDownloadedEmail(seeker.email, seeker.fullName, referrer.fullName, job.title, job.companyName, appsUrl)
+          .catch((err) => console.error('[email] CV downloaded notify failed:', err));
+      } else {
+        createNotification(
+          app.seekerId,
+          'cv_internally_submitted',
+          `${referrer.fullName} submitted your CV internally`,
+          `Great news — your CV for ${job.title} at ${job.companyName} was submitted into their internal system.`,
+          appsUrl,
+        ).catch(() => {});
+        sendInternallySubmittedEmail(seeker.email, seeker.fullName, referrer.fullName, job.title, job.companyName, appsUrl)
+          .catch((err) => console.error('[email] internally submitted notify failed:', err));
       }
     }
   }
@@ -512,11 +543,21 @@ export async function sendMessage(
       const preview = content.length > 120 ? `${content.slice(0, 117)}…` : content;
       createNotification(
         recipientId,
-        'application_message' as Parameters<typeof createNotification>[1],
+        'application_message',
         `${sender.fullName} sent you a message`,
         preview,
         recipientLinkUrl,
       ).catch(() => {});
+      db.select({ email: users.email, fullName: users.fullName })
+        .from(users)
+        .where(eq(users.id, recipientId))
+        .limit(1)
+        .then(([recipient]) => {
+          if (!recipient) return;
+          sendNewMessageEmail(recipient.email, recipient.fullName, sender.fullName, preview, recipientLinkUrl)
+            .catch((err) => console.error('[email] message notify failed:', err));
+        })
+        .catch(() => {});
     })
     .catch(() => {});
 

@@ -23,6 +23,7 @@ export async function getStats() {
   const [viewedApps]    = await db.select({ count: count() }).from(applications).where(eq(applications.status, 'viewed'));
   const [downloadedApps]= await db.select({ count: count() }).from(applications).where(eq(applications.status, 'forwarded'));
   const [rejectedApps]  = await db.select({ count: count() }).from(applications).where(eq(applications.status, 'rejected'));
+  const [submittedApps] = await db.select({ count: count() }).from(applications).where(eq(applications.status, 'internally_submitted'));
 
   // Connections
   const [totalConns]    = await db.select({ count: count() }).from(connections);
@@ -64,11 +65,12 @@ export async function getStats() {
       active: activeJobs.count,
     },
     applications: {
-      total:      totalApps.count,
-      viewed:     viewedApps.count,
-      downloaded: downloadedApps.count,
-      rejected:   rejectedApps.count,
-      pending:    totalApps.count - viewedApps.count - downloadedApps.count - rejectedApps.count,
+      total:               totalApps.count,
+      viewed:              viewedApps.count,
+      downloaded:          downloadedApps.count,
+      rejected:            rejectedApps.count,
+      internallySubmitted: submittedApps.count,
+      pending:             totalApps.count - viewedApps.count - downloadedApps.count - rejectedApps.count - submittedApps.count,
     },
     connections: {
       total:    totalConns.count,

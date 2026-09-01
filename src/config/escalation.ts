@@ -1,9 +1,19 @@
-/** Single source of truth for the referral response-time escalation ladder.
+/** Single source of truth for the referral response-time escalation ladders.
  *  Change the day counts here — everything that reads them (the sweep, and
  *  any future copy) follows automatically. */
+
+// Clock A — from CV sent, while status is submitted/viewed.
 export const ESCALATION_DAYS = {
-  REMINDER: 1,   // referrer gets a nudge
-  ESCALATE: 3,   // seeker is told the referrer hasn't responded
+  REMINDER: 1,    // referrer gets a nudge
+  ESCALATE: 2,    // referrer gets a stronger reminder with a deadline
+  AUTO_CANCEL: 5, // application closes, seeker's credit is refunded
+} as const;
+
+// Clock B — from download (forwardedAt), while status is forwarded and the
+// referrer hasn't confirmed internal submission yet.
+export const SUBMIT_ESCALATION_DAYS = {
+  REMINDER: 2,    // referrer asked whether they submitted it internally
+  FOLLOWUP: 3,    // referrer gets a final reminder
   AUTO_CANCEL: 5, // application closes, seeker's credit is refunded
 } as const;
 
@@ -13,4 +23,10 @@ export const ESCALATION_MS = {
   REMINDER: ESCALATION_DAYS.REMINDER * MS_PER_DAY,
   ESCALATE: ESCALATION_DAYS.ESCALATE * MS_PER_DAY,
   AUTO_CANCEL: ESCALATION_DAYS.AUTO_CANCEL * MS_PER_DAY,
+} as const;
+
+export const SUBMIT_ESCALATION_MS = {
+  REMINDER: SUBMIT_ESCALATION_DAYS.REMINDER * MS_PER_DAY,
+  FOLLOWUP: SUBMIT_ESCALATION_DAYS.FOLLOWUP * MS_PER_DAY,
+  AUTO_CANCEL: SUBMIT_ESCALATION_DAYS.AUTO_CANCEL * MS_PER_DAY,
 } as const;

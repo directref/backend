@@ -7,9 +7,13 @@ export type NotificationType =
   | 'cv_forwarded'
   | 'cv_received'
   | 'cv_rejected'
-  | 'cv_reminder'   // Day 1 — nudges the referrer, who hasn't acted yet
-  | 'cv_escalated'  // Day 3 — tells the seeker their referrer hasn't responded
-  | 'cv_expired'    // Day 5 — application auto-closed, seeker's credit refunded
+  | 'cv_reminder'              // Clock A Day 1 — nudges the referrer, who hasn't acted yet
+  | 'cv_escalated'             // Clock A Day 2 — stronger reminder to the referrer, with a deadline
+  | 'cv_expired'               // Day 5 — application auto-closed, seeker's credit refunded (either clock)
+  | 'cv_submit_reminder'       // Clock B Day 2 from download — did you submit this internally?
+  | 'cv_submit_followup'       // Clock B Day 3 from download — final reminder
+  | 'cv_internally_submitted'  // referrer confirmed they submitted the CV internally
+  | 'application_message'
   | 'connection_request'
   | 'connection_accepted';
 
