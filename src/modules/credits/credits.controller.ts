@@ -7,11 +7,13 @@ export const getBalance = asyncHandler(async (req: Request, res: Response) => {
   res.json({ data });
 });
 
-export const getPackages = asyncHandler(async (_req: Request, res: Response) => {
-  res.json({ data: svc.getPackages() });
-});
-
-export const purchase = asyncHandler(async (req: Request, res: Response) => {
-  const data = await svc.purchaseCredits(req.user!.id, req.body.packageId);
-  res.json({ data });
-});
+// ── Purchasing is disabled — kept for a quick re-enable, not routed (see
+// credits.router.ts). ──────────────────────────────────────────────────────
+// export const getPackages = asyncHandler(async (_req: Request, res: Response) => {
+//   res.json({ data: svc.getPackages() });
+// });
+//
+// export const purchase = asyncHandler(async (req: Request, res: Response) => {
+//   const data = await svc.purchaseCredits(req.user!.id, req.body.packageId);
+//   res.json({ data });
+// });

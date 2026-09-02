@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import { AppError } from '../../middleware/errorHandler';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../../services/email';
 import { generateInviteCode } from '../invites/invites.service';
+import { grantSignupCredits } from '../credits/credits.service';
 import type { RegisterDto } from './auth.schemas';
 import type { InferSelectModel } from 'drizzle-orm';
 
@@ -39,6 +40,8 @@ export async function register(dto: RegisterDto): Promise<User> {
     emailVerified: !hasEmailService, // auto-verify if no email service
     inviteCode,
   }).returning();
+
+  await grantSignupCredits(user.id);
 
   // Only send verification email if Resend is configured
   if (hasEmailService) {
@@ -136,6 +139,8 @@ export async function findOrCreateFromLinkedIn(profile: {
     avatarUrl: profile.avatarUrl,
     emailVerified: true,
   }).returning();
+
+  await grantSignupCredits(newUser.id);
 
   return newUser;
 }

@@ -7,6 +7,7 @@ import { users } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 import { AppError } from '../middleware/errorHandler';
+import { grantSignupCredits } from '../modules/credits/credits.service';
 
 export function configurePassport(): void {
   // ─── Local Strategy (email + password) ────────────────────────────────────
@@ -104,6 +105,8 @@ export function configurePassport(): void {
                 emailVerified: true,
               })
               .returning();
+
+            await grantSignupCredits(newUser.id);
 
             return done(null, newUser);
           } catch (err) {

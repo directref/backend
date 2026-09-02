@@ -1,6 +1,6 @@
 import { db } from '../../config/db';
 import { users, creditPurchases } from '../../db/schema';
-import { eq, and, gt, asc } from 'drizzle-orm';
+import { eq, and, gt, asc, sql } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler';
 
 export interface CreditPackage {
@@ -12,9 +12,10 @@ export interface CreditPackage {
   featured?: boolean;
 }
 
-// Placeholder pricing — no payment processor integrated yet. Swap these
-// values (and wire a real processor into purchaseCredits below) once real
-// numbers/a provider are decided.
+// Buying credits is currently disabled (see credits.controller.ts /
+// credits.router.ts and the frontend's /credits page + OutOfCreditsModal).
+// Left intact, not deleted, so it's a quick flip back on if paid packs
+// launch later.
 export const CREDIT_PACKAGES: CreditPackage[] = [
   { id: 'starter', name: 'Starter', credits: 3,  price: 29, currency: 'ILS' },
   { id: 'growth',  name: 'Growth',  credits: 5,  price: 45, currency: 'ILS', featured: true },
@@ -25,37 +26,76 @@ export function getPackages(): CreditPackage[] {
   return CREDIT_PACKAGES;
 }
 
+const SIGNUP_CREDITS = 3;
+const MONTHLY_CREDITS = 1;
+
 function currentMonth(): string {
   const d = new Date();
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
-/** Resets the free credit if the calendar month has rolled over since it was last touched. */
-async function ensureFreeCreditMonth(userId: string): Promise<{ freeCreditsUsed: boolean }> {
-  const [user] = await db
-    .select({ freeCreditsMonth: users.freeCreditsMonth, freeCreditsUsed: users.freeCreditsUsed })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-  if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
+// Credits under the current model never expire, but credit_purchases.expires_at
+// is NOT NULL (that table doubles as the general credit-grant ledger — signup,
+// monthly, refunds — 'purchases' is a legacy name from when it only held paid
+// packs). Set far enough out that it never practically matters.
+function neverExpires(): Date {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 100);
+  return d;
+}
 
+/**
+ * One-time signup bonus. Call exactly once, right after a new user row is
+ * created (all three signup paths: email/password, Google, LinkedIn).
+ */
+export async function grantSignupCredits(userId: string): Promise<void> {
+  await db.insert(creditPurchases).values({
+    userId,
+    packageId: 'signup',
+    credits: SIGNUP_CREDITS,
+    remainingCredits: SIGNUP_CREDITS,
+    pricePaid: '0',
+    currency: 'ILS',
+    expiresAt: neverExpires(),
+  });
+  // freeCreditsMonth doubles as "last calendar month this user received a
+  // recurring grant" — stamp it now so grantMonthlyCredits doesn't also
+  // hand out a redundant +1 for the signup month itself.
+  await db.update(users).set({ freeCreditsMonth: currentMonth(), updatedAt: new Date() }).where(eq(users.id, userId));
+}
+
+/**
+ * Recurring +1/month grant for every user, run by the scheduler (see
+ * scheduler/creditGrantSweep.ts). Idempotent per user per calendar month via
+ * users.freeCreditsMonth, so a missed or repeated sweep tick never double-grants.
+ */
+export async function grantMonthlyCredits(): Promise<number> {
   const month = currentMonth();
-  if (user.freeCreditsMonth === month) return user;
+  const due = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(sql`${users.freeCreditsMonth} IS DISTINCT FROM ${month}`);
 
-  await db.update(users)
-    .set({ freeCreditsMonth: month, freeCreditsUsed: false, updatedAt: new Date() })
-    .where(eq(users.id, userId));
-  return { freeCreditsUsed: false };
+  for (const u of due) {
+    await db.insert(creditPurchases).values({
+      userId: u.id,
+      packageId: 'monthly',
+      credits: MONTHLY_CREDITS,
+      remainingCredits: MONTHLY_CREDITS,
+      pricePaid: '0',
+      currency: 'ILS',
+      expiresAt: neverExpires(),
+    });
+    await db.update(users).set({ freeCreditsMonth: month, updatedAt: new Date() }).where(eq(users.id, u.id));
+  }
+  return due.length;
 }
 
 export interface CreditBalance {
-  freeAvailable: number; // 0 or 1
-  freeTotal: number;     // always 1
-  purchased: number;
   total: number;
 }
 
-async function purchasedBalance(userId: string): Promise<number> {
+export async function getBalance(userId: string): Promise<CreditBalance> {
   const rows = await db
     .select({ remainingCredits: creditPurchases.remainingCredits })
     .from(creditPurchases)
@@ -64,29 +104,16 @@ async function purchasedBalance(userId: string): Promise<number> {
       gt(creditPurchases.expiresAt, new Date()),
       gt(creditPurchases.remainingCredits, 0),
     ));
-  return rows.reduce((sum, r) => sum + r.remainingCredits, 0);
-}
-
-export async function getBalance(userId: string): Promise<CreditBalance> {
-  const free = await ensureFreeCreditMonth(userId);
-  const purchased = await purchasedBalance(userId);
-  const freeAvailable = free.freeCreditsUsed ? 0 : 1;
-  return { freeAvailable, freeTotal: 1, purchased, total: freeAvailable + purchased };
+  return { total: rows.reduce((sum, r) => sum + r.remainingCredits, 0) };
 }
 
 /**
- * Spends exactly one credit for the given user — free credit first, then
- * the oldest non-expired purchase (FIFO). Throws OUT_OF_CREDITS if neither
- * is available. Used by both "Send My C.V." and "Post a job" — one shared
- * balance, no separate allowance per action.
+ * Spends exactly one credit — oldest non-expired grant first (FIFO),
+ * regardless of whether it came from signup, a monthly grant, or a refund.
+ * Throws OUT_OF_CREDITS if none is available. Used by both "Send My C.V."
+ * and "Post a job" — one shared balance, no separate allowance per action.
  */
-export async function spendCredit(userId: string): Promise<{ source: 'free' | 'purchased' }> {
-  const free = await ensureFreeCreditMonth(userId);
-  if (!free.freeCreditsUsed) {
-    await db.update(users).set({ freeCreditsUsed: true, updatedAt: new Date() }).where(eq(users.id, userId));
-    return { source: 'free' };
-  }
-
+export async function spendCredit(userId: string): Promise<void> {
   const [oldest] = await db
     .select({ id: creditPurchases.id, remainingCredits: creditPurchases.remainingCredits })
     .from(creditPurchases)
@@ -105,25 +132,13 @@ export async function spendCredit(userId: string): Promise<{ source: 'free' | 'p
   await db.update(creditPurchases)
     .set({ remainingCredits: oldest.remainingCredits - 1 })
     .where(eq(creditPurchases.id, oldest.id));
-
-  return { source: 'purchased' };
 }
 
 /**
- * Refunds exactly one credit to the user's general balance (PRD: refunds
- * aren't tagged by origin). If this month's free credit was the one spent,
- * restore that; otherwise grant a purchased-style credit with a fresh
- * 12-month expiry. Used by the Day-5 auto-cancel sweep.
+ * Refunds exactly one credit to the user's general balance (never-expiring,
+ * untagged by origin). Used by the Day-5 auto-cancel sweep.
  */
 export async function refundCredit(userId: string): Promise<void> {
-  const free = await ensureFreeCreditMonth(userId);
-  if (free.freeCreditsUsed) {
-    await db.update(users).set({ freeCreditsUsed: false, updatedAt: new Date() }).where(eq(users.id, userId));
-    return;
-  }
-
-  const expiresAt = new Date();
-  expiresAt.setMonth(expiresAt.getMonth() + 12);
   await db.insert(creditPurchases).values({
     userId,
     packageId: 'refund',
@@ -131,27 +146,29 @@ export async function refundCredit(userId: string): Promise<void> {
     remainingCredits: 1,
     pricePaid: '0',
     currency: 'ILS',
-    expiresAt,
+    expiresAt: neverExpires(),
   });
 }
 
-/** Stubbed purchase — no real payment processor yet, grants credits immediately. */
-export async function purchaseCredits(userId: string, packageId: string): Promise<CreditBalance> {
-  const pkg = CREDIT_PACKAGES.find((p) => p.id === packageId);
-  if (!pkg) throw new AppError(400, 'INVALID_PACKAGE', 'Unknown credit package');
-
-  const expiresAt = new Date();
-  expiresAt.setMonth(expiresAt.getMonth() + 12);
-
-  await db.insert(creditPurchases).values({
-    userId,
-    packageId: pkg.id,
-    credits: pkg.credits,
-    remainingCredits: pkg.credits,
-    pricePaid: String(pkg.price),
-    currency: pkg.currency,
-    expiresAt,
-  });
-
-  return getBalance(userId);
-}
+// ── Purchasing is disabled — kept for a quick re-enable, not wired into any
+// reachable route (see credits.router.ts) or UI. ──────────────────────────
+// /** Stubbed purchase — no real payment processor yet, grants credits immediately. */
+// export async function purchaseCredits(userId: string, packageId: string): Promise<CreditBalance> {
+//   const pkg = CREDIT_PACKAGES.find((p) => p.id === packageId);
+//   if (!pkg) throw new AppError(400, 'INVALID_PACKAGE', 'Unknown credit package');
+//
+//   const expiresAt = new Date();
+//   expiresAt.setMonth(expiresAt.getMonth() + 12);
+//
+//   await db.insert(creditPurchases).values({
+//     userId,
+//     packageId: pkg.id,
+//     credits: pkg.credits,
+//     remainingCredits: pkg.credits,
+//     pricePaid: String(pkg.price),
+//     currency: pkg.currency,
+//     expiresAt,
+//   });
+//
+//   return getBalance(userId);
+// }

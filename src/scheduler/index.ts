@@ -1,14 +1,19 @@
 import { runEscalationSweep } from './escalationSweep';
+import { runCreditGrantSweep } from './creditGrantSweep';
 
 // No existing job/cron infrastructure in this app — a plain interval is all
 // a single-process MVP needs. Runs every 15 minutes; each phase inside the
-// sweep is idempotent, so a missed or overlapping tick never double-sends.
+// sweep is idempotent, so a missed or overlapping tick never double-sends
+// (or, for credits, never double-grants).
 const SWEEP_INTERVAL_MS = 15 * 60 * 1000;
 
+function runAllSweeps(): void {
+  runEscalationSweep().catch((err) => console.error('[scheduler] escalation sweep failed:', err));
+  runCreditGrantSweep().catch((err) => console.error('[scheduler] credit grant sweep failed:', err));
+}
+
 export function startScheduler(): void {
-  runEscalationSweep().catch((err) => console.error('[scheduler] initial sweep failed:', err));
-  setInterval(() => {
-    runEscalationSweep().catch((err) => console.error('[scheduler] sweep failed:', err));
-  }, SWEEP_INTERVAL_MS);
-  console.log(`   Scheduler:   escalation sweep every ${SWEEP_INTERVAL_MS / 60_000}m\n`);
+  runAllSweeps();
+  setInterval(runAllSweeps, SWEEP_INTERVAL_MS);
+  console.log(`   Scheduler:   escalation + credit grant sweeps every ${SWEEP_INTERVAL_MS / 60_000}m\n`);
 }

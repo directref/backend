@@ -25,11 +25,14 @@ export const users = pgTable(
     yearsOfExperience: integer('years_of_experience'),
     employmentType: varchar('employment_type', { length: 20 }), // 'full-time' | 'part-time'
     seniority: varchar('seniority', { length: 20 }), // 'junior' | 'mid' | 'senior' | 'lead' | 'manager'
-    // Credits — 1 free credit per calendar month, shared balance for both
-    // sending a C.V. and posting a job. freeCreditsMonth is the 'YYYY-MM' the
-    // free credit was last reset for; freeCreditsUsed tracks whether that
-    // month's free credit has been spent. Purchased credits live in
-    // credit_purchases (their own expiry per purchase).
+    // Credits — every user gets 3 on signup, then +1/month thereafter (see
+    // credits.service.ts), one shared balance for both sending a C.V. and
+    // posting a job. All actual grants (signup, monthly, refunds) live as
+    // rows in credit_purchases; freeCreditsMonth here is just the 'YYYY-MM'
+    // this user last received their recurring monthly grant, so the sweep
+    // that hands it out never double-grants in the same month.
+    // freeCreditsUsed is unused/deprecated — left in place, no schema
+    // migration, from the old "1 free credit that resets monthly" model.
     freeCreditsMonth: varchar('free_credits_month', { length: 7 }),
     freeCreditsUsed: boolean('free_credits_used').notNull().default(false),
     // Onboarding + invite
