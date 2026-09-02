@@ -28,6 +28,7 @@ import {
   sendSubmitReminderEmail,
   sendSubmitFollowupEmail,
   sendInternallySubmittedEmail,
+  sendReferrerExpiredEmail,
   sendNewMessageEmail,
 } from '../services/email';
 
@@ -39,12 +40,13 @@ if (!to || !to.includes('@')) {
   process.exit(1);
 }
 
-// Sample cast — the seeker's name and company carry markup on purpose (see header).
-const seeker = 'Dana <script>Cohen</script>';
-const referrer = 'Roni "The Connector" Levi';
+// Sample cast — clean names for proofreading. The escaping probe lives in the
+// new-message preview text below (see header).
+const seeker = 'Dana Cohen';
+const referrer = 'Roni Levi';
 const job = 'Senior Product Manager, Growth & Retention';
 const company = 'Acme R&D Ltd.';
-const note = 'Worked with Dana before — strong PM & a great culture fit. <b>Highly recommend.</b>';
+const note = 'Worked with Dana before — strong PM & a great culture fit. Highly recommend.';
 const inboxUrl = `${env.FRONTEND_URL}/applications/inbox`;
 const appsUrl = `${env.FRONTEND_URL}/applications`;
 const cvViewUrl = `${env.FRONTEND_URL}/applications/preview-id/cv`;
@@ -53,17 +55,21 @@ const templates: Array<[name: string, send: () => Promise<void>]> = [
   ['verification',          () => sendVerificationEmail(to, 'preview-token', seeker)],
   ['password-reset',        () => sendPasswordResetEmail(to, 'preview-token')],
   ['cv-received',           () => sendCVNotificationEmail(to, referrer, seeker, job, company, inboxUrl)],
-  ['cv-viewed',             () => sendCVViewedEmail(to, seeker, referrer, job, company, appsUrl)],
+  // Paused in the app (uncomment to re-review the designs):
+  // ['cv-viewed',             () => sendCVViewedEmail(to, seeker, referrer, job, company, appsUrl)],
   ['cv-downloaded',         () => sendCVDownloadedEmail(to, seeker, referrer, job, company, appsUrl)],
-  ['forwarded-to-hr',       () => sendForwardedToHREmail(to, referrer, note, seeker, job, company, cvViewUrl)],
-  ['cv-forwarded-seeker',   () => sendCVForwardedEmail(to, seeker, referrer, job, company, appsUrl)],
+  // forward-to-HR flow removed from the product — templates kept in email.ts only:
+  // ['forwarded-to-hr',       () => sendForwardedToHREmail(to, referrer, note, seeker, job, company, cvViewUrl)],
+  // ['cv-forwarded-seeker',   () => sendCVForwardedEmail(to, seeker, referrer, job, company, appsUrl)],
   ['internally-submitted',  () => sendInternallySubmittedEmail(to, seeker, referrer, job, company, appsUrl)],
   ['reminder-day1',         () => sendReminderEmail(to, referrer, seeker, job, company, inboxUrl)],
   ['reminder-day2',         () => sendSecondReminderEmail(to, referrer, seeker, job, company, inboxUrl)],
   ['submit-reminder-day2',  () => sendSubmitReminderEmail(to, referrer, seeker, job, company, inboxUrl)],
-  ['submit-followup-day3',  () => sendSubmitFollowupEmail(to, referrer, seeker, job, company, inboxUrl)],
+  // ['submit-followup-day3',  () => sendSubmitFollowupEmail(to, referrer, seeker, job, company, inboxUrl)],
   ['expired-day5',          () => sendExpiredEmail(to, seeker, referrer, job, company, appsUrl)],
-  ['new-message',           () => sendNewMessageEmail(to, seeker, referrer, 'Hi! Quick question about the role — is it hybrid or fully remote?', inboxUrl)],
+  // ['referrer-expired-day5', () => sendReferrerExpiredEmail(to, referrer, seeker, job, company, inboxUrl)],
+  // The <script> string here is the escaping probe — it must render as literal text.
+  ['new-message',           () => sendNewMessageEmail(to, seeker, referrer, 'Hi! Quick question <script>alert(1)</script> — is the role hybrid or fully remote?', inboxUrl)],
 ];
 
 // Resend rate-limits to ~2 req/s — a small gap keeps the whole batch clean.

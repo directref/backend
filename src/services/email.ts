@@ -4,12 +4,36 @@ import { env } from '../config/env';
 // Use a dummy key if not configured — emails just won't send
 const resend = new Resend(env.RESEND_API_KEY || 're_placeholder_key');
 
-// Matches the app's actual palette (globals.css gold-300/500), not a generic default.
-const brand = {
-  gold: '#D4AF7A',     // button fill
-  goldText: '#A87D3A', // gold at readable contrast on white — wordmark, links
-  ink: '#1A1206',      // text on gold
-  name: 'DirectRef',
+// ─────────────────────────────────────────────────────────────────────────────
+// DirectRef email design system — ported from the design handoff
+// (email-designs/DESIGN-GUIDELINES.md). Table-based layout with inline styles
+// for Gmail/Outlook compatibility; no flex/grid, no media queries. Every email
+// is composed from the block primitives below.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FONT = `'Rubik', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif`;
+
+const color = {
+  gold: '#d7a44a',       // primary CTA, accent dot
+  goldSoft: '#f6e9cf',   // gold badge/card background, step counters
+  goldInk: '#3a2f16',    // text on gold
+  ink: '#2c2926',        // headings, strong inline text
+  inkSecondary: '#6f6a64', // body text, links
+  inkMuted: '#948e87',   // eyebrow, footer, meta
+  border: '#e9e6e1',     // card borders, dividers
+  background: '#faf9f7', // page background + neutral card fill
+  surface: '#ffffff',
+  sidebar: '#2a2724',    // header band
+  sidebarMuted: '#a49e97',
+} as const;
+
+type Tone = 'gold' | 'success' | 'info' | 'expired' | 'neutral';
+const tone: Record<Tone, { bg: string; text: string }> = {
+  gold: { bg: '#f6e9cf', text: '#3a2f16' },
+  success: { bg: '#dff2e6', text: '#2f8f5b' },
+  info: { bg: '#e2ebf6', text: '#3f6fa8' },
+  expired: { bg: '#efedea', text: '#7c766f' },
+  neutral: { bg: '#faf9f7', text: '#2c2926' },
 };
 
 function escapeHtml(text: string): string {
@@ -22,60 +46,153 @@ function escapeHtml(text: string): string {
 }
 
 // Every user-supplied value (names, job titles, company names, notes) MUST go
-// through this before landing in an HTML body. Subjects are plain text — no
-// escaping there, or entities would show literally.
+// through esc() or strong() before landing in an HTML body. Subjects and
+// preheaders are handled at their insertion points.
 const esc = escapeHtml;
 
-function btn(href: string, label: string) {
-  return `<a href="${href}" style="display:inline-block;background:${brand.gold};color:${brand.ink};padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-family:system-ui,sans-serif;">${label}</a>`;
+/** Emphasized inline value (name, job title, company) — escaped. */
+const strong = (v: string) => `<strong style="color:${color.ink};font-weight:600;">${esc(v)}</strong>`;
+
+// ── Block primitives ─────────────────────────────────────────────────────────
+
+const eyebrow = (label: string) =>
+  `<p style="margin:0 0 10px 0;font:600 11px/1.2 ${FONT};letter-spacing:1.1px;text-transform:uppercase;color:${color.inkMuted};">${esc(label)}</p>`;
+
+const badge = (label: string, t: Tone) =>
+  `<p style="margin:0 0 16px 0;"><span style="display:inline-block;padding:5px 12px;border-radius:999px;background:${tone[t].bg};color:${tone[t].text};font:600 12px/1.2 ${FONT};">${esc(label)}</span></p>`;
+
+/** Single h1 per email. Accepts pre-built HTML (use strong() for dynamic parts). */
+const heading = (html: string) =>
+  `<h1 style="margin:0 0 14px 0;font:700 23px/1.25 ${FONT};color:${color.ink};letter-spacing:-0.4px;">${html}</h1>`;
+
+/** Body paragraph. Accepts pre-built HTML (use strong()/esc() for dynamic parts). */
+const text = (html: string) =>
+  `<p style="margin:0 0 14px 0;font:400 15px/1.65 ${FONT};color:${color.inkSecondary};">${html}</p>`;
+
+/** Info card: bold title + body lines. Lines accept pre-built HTML. */
+function card(title: string, lines: string[], t: Tone = 'neutral') {
+  const body = lines
+    .map((l) => `<p style="margin:0 0 4px 0;font:400 13.5px/1.6 ${FONT};color:${color.inkSecondary};">${l}</p>`)
+    .join('');
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px 0;">
+        <tr><td style="padding:16px 18px;border:1px solid ${color.border};border-radius:14px;background:${tone[t].bg};">
+          <p style="margin:0 0 6px 0;font:600 15px/1.4 ${FONT};color:${color.ink};">${title}</p>
+          ${body}
+        </td></tr></table>`;
 }
 
-function layout(body: string) {
-  return `
-    <div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;color:#24180c;">
-      <div style="padding:24px 0 8px;">
-        <span style="font-size:22px;font-weight:900;letter-spacing:-0.5px;color:${brand.goldText};">${brand.name}</span>
-      </div>
-      <div style="background:#FAF6EF;border:1px solid #EDE2CE;border-radius:12px;padding:28px;">
-        ${body}
-      </div>
-      <p style="font-size:12px;color:#8a7a63;margin-top:16px;text-align:center;">
-        You're receiving this because you use ${brand.name}.
-        <a href="${env.FRONTEND_URL}" style="color:${brand.goldText};">Open app →</a>
+/** Numbered steps with gold-soft circular counters. Items accept pre-built HTML. */
+function steps(items: string[]) {
+  const rows = items
+    .map(
+      (item, i) => `<tr>
+          <td width="26" valign="top" style="padding:0 0 10px 0;">
+            <div style="width:20px;height:20px;border-radius:999px;background:${color.goldSoft};color:${color.goldInk};font:600 11px/20px ${FONT};text-align:center;">${i + 1}</div>
+          </td>
+          <td valign="top" style="padding:0 0 10px 0;font:400 14px/1.55 ${FONT};color:${color.inkSecondary};">${item}</td>
+        </tr>`,
+    )
+    .join('');
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px 0;">${rows}</table>`;
+}
+
+/** Gold pill CTA — one per email. */
+const button = (href: string, label: string) =>
+  `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 18px 0;"><tr>
+        <td style="border-radius:999px;background:${color.gold};">
+          <a href="${href}" style="display:inline-block;padding:13px 26px;font:600 14px/1 ${FONT};color:${color.goldInk};text-decoration:none;border-radius:999px;">${esc(label)}</a>
+        </td></tr></table>`;
+
+/** Underlined secondary action. */
+const link = (href: string, label: string) =>
+  `<p style="margin:0 0 14px 0;font:500 14px/1.6 ${FONT};"><a href="${href}" style="color:${color.inkSecondary};text-decoration:underline;">${esc(label)}</a></p>`;
+
+// ── Layout shell ─────────────────────────────────────────────────────────────
+
+function layout(title: string, preheader: string, blocks: string) {
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(title)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0;padding:0;background:${color.background};">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${esc(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${color.background};padding:28px 12px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:${color.surface};border:1px solid ${color.border};border-radius:16px;">
+  <tr>
+    <td style="padding:28px 32px 22px 32px;background:${color.sidebar};border-radius:16px 16px 0 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="padding-right:10px;vertical-align:middle;">
+          <div style="width:26px;height:26px;border-radius:8px;background:${color.gold};"></div>
+        </td>
+        <td style="vertical-align:middle;">
+          <div style="font:600 17px/1.1 ${FONT};color:#ffffff;letter-spacing:-0.2px;">DirectRef</div>
+          <div style="font:400 11px/1.4 ${FONT};color:${color.sidebarMuted};padding-top:2px;">Refer. Get hired.</div>
+        </td>
+      </tr></table>
+    </td>
+  </tr>
+      <tr><td style="padding:30px 32px 8px 32px;">
+        ${blocks}
+      </td></tr>
+  <tr>
+    <td style="padding:22px 32px 28px 32px;border-top:1px solid ${color.border};">
+      <p style="margin:0;font:400 12px/1.6 ${FONT};color:${color.inkMuted};">
+        You're getting this because you use DirectRef. A referral is a human handing your C.V. to
+        the right person &mdash; it is not a guaranteed interview.
       </p>
-    </div>
-  `;
+      <p style="margin:10px 0 0 0;font:400 12px/1.6 ${FONT};color:${color.inkMuted};">
+        <a href="${env.FRONTEND_URL}/settings" style="color:${color.inkSecondary};text-decoration:underline;">Email preferences</a>
+        &nbsp;&middot;&nbsp;
+        <a href="${env.FRONTEND_URL}/privacy" style="color:${color.inkSecondary};text-decoration:underline;">Privacy</a>
+        &nbsp;&middot;&nbsp;
+        <a href="${env.FRONTEND_URL}/terms" style="color:${color.inkSecondary};text-decoration:underline;">Terms</a>
+      </p>
+    </td>
+  </tr>
+    </table>
+    <p style="margin:16px 0 0 0;font:400 11.5px/1.5 ${FONT};color:${color.inkMuted};">DirectRef &middot; direct-ref.com</p>
+  </td></tr>
+</table>
+</body></html>`;
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export async function sendVerificationEmail(to: string, token: string, name: string): Promise<void> {
-  const link = `${env.FRONTEND_URL}/verify-email?token=${token}`;
+  const verifyUrl = `${env.FRONTEND_URL}/verify-email?token=${token}`;
+  const subject = 'Confirm your DirectRef account';
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to,
-    subject: `Verify your ${brand.name} account`,
-    html: layout(`
-      <h2 style="margin:0 0 8px;">Welcome to ${brand.name}, ${esc(name)}!</h2>
-      <p style="color:#555;">Please verify your email to get started:</p>
-      ${btn(link, 'Verify Email')}
-      <p style="font-size:12px;color:#999;margin-top:16px;">This link expires in 24 hours.</p>
-    `),
+    subject,
+    html: layout(subject, 'Confirm your email to finish setting up your account.', [
+      eyebrow('Account'),
+      heading(`Welcome to DirectRef, ${esc(name)}`),
+      text(`DirectRef puts your C.V. in a real person's hands instead of an applicant-tracking queue. Confirm your email to finish setting up your account.`),
+      button(verifyUrl, 'Confirm my email'),
+      text('This link is valid for 24 hours.'),
+      text(`If you didn't create a DirectRef account, you can ignore this email and nothing happens.`),
+    ].join('\n')),
   });
 }
 
 export async function sendPasswordResetEmail(to: string, token: string): Promise<void> {
-  const link = `${env.FRONTEND_URL}/reset-password?token=${token}`;
+  const resetUrl = `${env.FRONTEND_URL}/reset-password?token=${token}`;
+  const subject = 'Reset your DirectRef password';
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to,
-    subject: 'Reset your password',
-    html: layout(`
-      <h2 style="margin:0 0 8px;">Password Reset</h2>
-      <p style="color:#555;">Click below to reset your password. This link expires in 1 hour.</p>
-      ${btn(link, 'Reset Password')}
-      <p style="font-size:12px;color:#999;margin-top:16px;">If you didn't request this, you can safely ignore this email.</p>
-    `),
+    subject,
+    html: layout(subject, 'Set a new password — the link is valid for 1 hour.', [
+      eyebrow('Account'),
+      heading('Reset your password'),
+      text('Click below to choose a new password. The link is valid for 1 hour.'),
+      button(resetUrl, 'Reset my password'),
+      text(`If you didn't request this, you can safely ignore this email — your password stays as it is.`),
+    ].join('\n')),
   });
 }
 
@@ -92,15 +209,20 @@ export async function sendCVNotificationEmail(
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to: referrerEmail,
-    subject: `${seekerName} sent you their CV`,
-    html: layout(`
-      <h2 style="margin:0 0 8px;">New CV in your inbox</h2>
-      <p style="color:#555;">
-        <strong>${esc(seekerName)}</strong> sent you their CV for
-        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong>.
-      </p>
-      ${btn(dashboardUrl, 'View CV in Dashboard')}
-    `),
+    subject: `New C.V. for ${jobTitle}`,
+    html: layout(`New C.V. for ${jobTitle}`, `${seekerName} sent a C.V. for your posted role.`, [
+      eyebrow('C.V. inbox'),
+      badge('Awaiting your review', 'gold'),
+      heading(`${esc(seekerName)} sent you a C.V.`),
+      text(`Someone applied to ${strong(jobTitle)} at ${strong(companyName)} — the role you posted. Review the C.V. and, if it's a fit, submit it through your internal referral programme.`),
+      steps([
+        'Open the C.V. in your inbox',
+        `Download it if it's a fit`,
+        'Submit it internally and mark the status',
+      ]),
+      button(dashboardUrl, 'Review the C.V.'),
+      text('You have 5 days to act before the application expires.'),
+    ].join('\n')),
   });
 }
 
@@ -117,16 +239,14 @@ export async function sendCVViewedEmail(
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to: seekerEmail,
-    subject: `${referrerName} viewed your CV`,
-    html: layout(`
-      <h2 style="margin:0 0 8px;">Your CV was viewed</h2>
-      <p style="color:#555;">
-        <strong>${esc(referrerName)}</strong> opened your CV for
-        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong>.
-      </p>
-      <p style="color:#555;">They haven't forwarded it to HR yet — hang tight!</p>
-      ${btn(applicationsUrl, 'View My Applications')}
-    `),
+    subject: `${referrerName} viewed your C.V.`,
+    html: layout(`${referrerName} viewed your C.V.`, 'A human just opened your C.V.', [
+      eyebrow('Application update'),
+      badge('Viewed', 'info'),
+      heading('Your C.V. was opened'),
+      text(`${strong(referrerName)} opened your C.V. for ${strong(jobTitle)} at ${strong(companyName)}. The next update comes when they download it to refer you — or let you know it's not a fit.`),
+      button(applicationsUrl, 'Track this application'),
+    ].join('\n')),
   });
 }
 
@@ -143,16 +263,15 @@ export async function sendCVForwardedEmail(
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to: seekerEmail,
-    subject: `Your CV was forwarded to HR at ${companyName}`,
-    html: layout(`
-      <h2 style="margin:0 0 8px;">Great news, ${esc(seekerName)}!</h2>
-      <p style="color:#555;">
-        <strong>${esc(referrerName)}</strong> forwarded your CV for
-        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong> to their HR team.
-      </p>
-      <p style="color:#555;">Your application is now in front of the hiring manager. Good luck!</p>
-      ${btn(applicationsUrl, 'View My Applications')}
-    `),
+    subject: `Your C.V. was forwarded to HR at ${companyName}`,
+    html: layout(`Your C.V. was forwarded to HR at ${companyName}`, 'Your C.V. is with the HR team now.', [
+      eyebrow('Application update'),
+      badge('Sent to HR', 'success'),
+      heading('Your C.V. went to HR'),
+      text(`${strong(referrerName)} forwarded your C.V. for ${strong(jobTitle)} at ${strong(companyName)} to their HR team.`),
+      button(applicationsUrl, 'Track this application'),
+      text(`What we promise: your C.V. reaches a human. What we can't promise: an interview. That call is HR's.`),
+    ].join('\n')),
   });
 }
 
@@ -167,19 +286,21 @@ export async function sendForwardedToHREmail(
   companyName: string,
   cvViewUrl: string,
 ): Promise<void> {
+  const blocks = [
+    eyebrow('Employee referral'),
+    badge('Referral', 'gold'),
+    heading(`${esc(referrerName)} is referring ${esc(seekerName)}`),
+    text(`${strong(referrerName)} is referring ${strong(seekerName)} for ${strong(jobTitle)} at ${strong(companyName)} through DirectRef.`),
+  ];
+  if (referrerNote) {
+    blocks.push(card(`A note from ${esc(referrerName)}`, [`&ldquo;${esc(referrerNote)}&rdquo;`], 'gold'));
+  }
+  blocks.push(button(cvViewUrl, 'View C.V.'));
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to: hrEmail,
     subject: `Referral: ${seekerName} for ${jobTitle}`,
-    html: layout(`
-      <h2 style="margin:0 0 8px;">Employee Referral</h2>
-      <p style="color:#555;">
-        <strong>${esc(referrerName)}</strong> is referring <strong>${esc(seekerName)}</strong>
-        for <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong>.
-      </p>
-      ${referrerNote ? `<blockquote style="border-left:3px solid ${brand.gold};margin:16px 0;padding-left:12px;color:#555;font-style:italic;">"${esc(referrerNote)}"</blockquote>` : ''}
-      ${btn(cvViewUrl, 'View CV')}
-    `),
+    html: layout(`Referral: ${seekerName} for ${jobTitle}`, `${referrerName} is referring ${seekerName} for ${jobTitle}.`, blocks.join('\n')),
   });
 }
 
@@ -197,16 +318,15 @@ export async function sendReminderEmail(
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to: referrerEmail,
-    subject: `Reminder: ${seekerName}'s CV is still waiting on you`,
-    html: layout(`
-      <h2 style="margin:0 0 8px;">A CV is waiting on you</h2>
-      <p style="color:#555;">
-        It's been a day since <strong>${esc(seekerName)}</strong> sent their CV for
-        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong>. They're still waiting to hear
-        whether you can refer them.
-      </p>
-      ${btn(inboxUrl, 'Review the CV')}
-    `),
+    subject: `Still waiting: ${seekerName}'s C.V.`,
+    html: layout(`Still waiting: ${seekerName}'s C.V.`, 'One day in, four days left to act.', [
+      eyebrow('Reminder · Day 1'),
+      badge('Awaiting your review', 'gold'),
+      heading('A C.V. has been waiting a day'),
+      text(`${strong(seekerName)} is waiting on ${strong(jobTitle)}. A minute of your time either moves them forward or frees them up to try elsewhere.`),
+      card('4 days left', ['After 5 days the application expires and the seeker is refunded.'], 'neutral'),
+      button(inboxUrl, 'Open my C.V. inbox'),
+    ].join('\n')),
   });
 }
 
@@ -222,19 +342,19 @@ export async function sendSecondReminderEmail(
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to: referrerEmail,
-    subject: `${seekerName}'s CV resets in 3 days — please respond`,
-    html: layout(`
-      <h2 style="margin:0 0 8px;">This one's about to reset</h2>
-      <p style="color:#555;">
-        It's been 2 days since <strong>${esc(seekerName)}</strong> sent their CV for
-        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong>, and there's still no decision.
-      </p>
-      <p style="color:#555;">
-        <strong>3 more days</strong> and this application resets automatically, refunding their credit.
-        A quick "not a fit" is fine too — they just need an answer.
-      </p>
-      ${btn(inboxUrl, 'Review the CV')}
-    `),
+    subject: `2 days on: ${seekerName}'s C.V. for ${jobTitle}`,
+    html: layout(`2 days on: ${seekerName}'s C.V. for ${jobTitle}`, '3 days before it expires and the credit is refunded.', [
+      eyebrow('Reminder · Day 2'),
+      badge('Awaiting your review', 'gold'),
+      heading(`It's been 2 days — 3 to go`),
+      text(`${strong(seekerName)}'s C.V. for ${strong(jobTitle)} is still untouched. Download it and submit it internally, or mark it as not a fit so they know where they stand.`),
+      steps([
+        'Download the C.V.',
+        'Submit it through your referral programme',
+        `Or mark it not a fit — an honest no helps too`,
+      ]),
+      button(inboxUrl, 'Open my C.V. inbox'),
+    ].join('\n')),
   });
 }
 
@@ -251,17 +371,46 @@ export async function sendExpiredEmail(
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to: seekerEmail,
-    subject: `No response from ${referrerName} — your credit was refunded`,
-    html: layout(`
-      <h2 style="margin:0 0 8px;">This one closed without an answer</h2>
-      <p style="color:#555;">
-        <strong>${esc(referrerName)}</strong> didn't respond to your CV for
-        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong> within 5 days, so we've closed
-        this application automatically.
-      </p>
-      <p style="color:#555;"><strong>Your credit has been refunded</strong> — use it on another role whenever you're ready.</p>
-      ${btn(applicationsUrl, 'Browse Other Roles')}
-    `),
+    subject: `Your credit is back — ${jobTitle} expired`,
+    html: layout(`Your credit is back — ${jobTitle} expired`, 'No response from the referrer in 5 days, so we refunded you.', [
+      eyebrow('Application update'),
+      badge('Expired', 'expired'),
+      heading('No response, so your credit is back'),
+      text(`${strong(referrerName)} didn't act on your C.V. for ${strong(jobTitle)} within 5 days, so we closed the application and ${strong('refunded your credit')}. You can spend it on another role right now.`),
+      card('1 credit returned to your balance', [
+        'Nothing was submitted on your behalf.',
+        'Nothing was shared with the company.',
+      ], 'gold'),
+      button(`${env.FRONTEND_URL}/jobs`, 'Find another referrer'),
+      link(applicationsUrl, 'See all my applications'),
+    ].join('\n')),
+  });
+}
+
+/** Day 5 — tell the referrer the application expired and why responding matters. */
+export async function sendReferrerExpiredEmail(
+  referrerEmail: string,
+  referrerName: string,
+  seekerName: string,
+  jobTitle: string,
+  companyName: string,
+  inboxUrl: string,
+): Promise<void> {
+  await resend.emails.send({
+    from: env.EMAIL_FROM,
+    to: referrerEmail,
+    subject: `Expired: ${seekerName}'s C.V. for ${jobTitle}`,
+    html: layout(`Expired: ${seekerName}'s C.V. for ${jobTitle}`, 'No action in 5 days, so we closed it and refunded the seeker.', [
+      eyebrow('Reminder · Day 5'),
+      badge('Expired', 'expired'),
+      heading('This application has expired'),
+      text(`${strong(seekerName)}'s C.V. for ${strong(jobTitle)} closed after 5 days with no action, and their credit was refunded. It no longer appears in your inbox.`),
+      card('Keeping your response rate healthy', [
+        'Seekers see your response rate before they spend a credit.',
+        'Acting — even a decline — keeps it strong.',
+      ], 'neutral'),
+      button(inboxUrl, 'See my open C.V.s'),
+    ].join('\n')),
   });
 }
 
@@ -279,16 +428,19 @@ export async function sendCVDownloadedEmail(
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to: seekerEmail,
-    subject: `${referrerName} downloaded your CV`,
-    html: layout(`
-      <h2 style="margin:0 0 8px;">Good sign, ${esc(seekerName)}!</h2>
-      <p style="color:#555;">
-        <strong>${esc(referrerName)}</strong> downloaded your CV for
-        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong> — they're moving forward with it.
-      </p>
-      <p style="color:#555;">We'll let you know as soon as it's submitted into their internal system.</p>
-      ${btn(applicationsUrl, 'View My Applications')}
-    `),
+    subject: `${referrerName} downloaded your C.V. for ${jobTitle}`,
+    html: layout(`${referrerName} downloaded your C.V. for ${jobTitle}`, `It's out of the queue and in a human's hands.`, [
+      eyebrow('Application update'),
+      badge('Downloaded', 'success'),
+      heading(`Your C.V. is in a person's hands`),
+      text(`${strong(referrerName)} downloaded your C.V. for ${strong(jobTitle)} at ${strong(companyName)}. The next step is theirs: submitting it through their company's internal referral programme.`),
+      card(`${esc(jobTitle)} &middot; ${esc(companyName)}`, [
+        `Referrer: ${esc(referrerName)}`,
+        'Status: Downloaded — awaiting internal submission',
+      ], 'neutral'),
+      button(applicationsUrl, 'Track this application'),
+      text(`What we promise: your C.V. reaches a human. What we can't promise: an interview. That call is HR's.`),
+    ].join('\n')),
   });
 }
 
@@ -304,16 +456,18 @@ export async function sendSubmitReminderEmail(
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to: referrerEmail,
-    subject: `Did you submit ${seekerName}'s CV internally yet?`,
-    html: layout(`
-      <h2 style="margin:0 0 8px;">Quick check-in</h2>
-      <p style="color:#555;">
-        You downloaded <strong>${esc(seekerName)}</strong>'s CV for
-        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong> a couple of days ago.
-        Once it's in your company's system, let them know — it only takes a click.
-      </p>
-      ${btn(inboxUrl, 'Confirm Submission')}
-    `),
+    subject: `Did you submit ${seekerName}'s C.V. internally?`,
+    html: layout(`Did you submit ${seekerName}'s C.V. internally?`, 'Two days since you downloaded the C.V. — one tap closes the loop.', [
+      eyebrow('Status check · 48h after download'),
+      badge('Downloaded', 'info'),
+      heading('Did it make it into your system?'),
+      text(`You downloaded ${strong(seekerName)}'s C.V. for ${strong(jobTitle)} two days ago. If you've submitted it through your internal referral programme, mark it in DirectRef — that's the update they're waiting for.`),
+      card('Two taps, and they know', [
+        'Submitted internally &rarr; we notify the seeker it reached HR.',
+        'Not a fit &rarr; we close it honestly and refund their credit.',
+      ], 'info'),
+      button(inboxUrl, 'Update the status'),
+    ].join('\n')),
   });
 }
 
@@ -329,16 +483,15 @@ export async function sendSubmitFollowupEmail(
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to: referrerEmail,
-    subject: `Last check: did ${seekerName}'s CV get submitted?`,
-    html: layout(`
-      <h2 style="margin:0 0 8px;">Still waiting to hear back from you</h2>
-      <p style="color:#555;">
-        <strong>${esc(seekerName)}</strong>'s CV for <strong>${esc(jobTitle)}</strong> at
-        <strong>${esc(companyName)}</strong> is still marked as downloaded, not submitted.
-      </p>
-      <p style="color:#555;"><strong>2 more days</strong> and this resets automatically, refunding their credit.</p>
-      ${btn(inboxUrl, 'Confirm Submission')}
-    `),
+    subject: `Last check: did ${seekerName}'s C.V. get submitted?`,
+    html: layout(`Last check: did ${seekerName}'s C.V. get submitted?`, '2 days before this resets and the credit is refunded.', [
+      eyebrow('Status check · Day 3'),
+      badge('Downloaded', 'info'),
+      heading('Last check: did it go in?'),
+      text(`${strong(seekerName)}'s C.V. for ${strong(jobTitle)} at ${strong(companyName)} is still marked as downloaded, not submitted.`),
+      card('2 days left', ['After that this resets automatically and the seeker&#39;s credit is refunded.'], 'gold'),
+      button(inboxUrl, 'Update the status'),
+    ].join('\n')),
   });
 }
 
@@ -354,16 +507,18 @@ export async function sendInternallySubmittedEmail(
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to: seekerEmail,
-    subject: `Your CV was submitted internally at ${companyName}`,
-    html: layout(`
-      <h2 style="margin:0 0 8px;">Great news, ${esc(seekerName)}!</h2>
-      <p style="color:#555;">
-        <strong>${esc(referrerName)}</strong> confirmed your CV for
-        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong> has been submitted into their
-        internal system. Good luck!
-      </p>
-      ${btn(applicationsUrl, 'View My Applications')}
-    `),
+    subject: `Your C.V. was submitted internally at ${companyName}`,
+    html: layout(`Your C.V. was submitted internally at ${companyName}`, `It's in their referral system — the ball is in HR's court now.`, [
+      eyebrow('Application update'),
+      badge('Submitted internally', 'success'),
+      heading(`It's in their system`),
+      text(`${strong(referrerName)} confirmed your C.V. for ${strong(jobTitle)} was submitted through ${strong(companyName)}'s internal referral programme.`),
+      card('What happens next', [
+        'HR reviews internal referrals directly.',
+        `Interview decisions are theirs — we'll leave it in their hands. Good luck!`,
+      ], 'success'),
+      button(applicationsUrl, 'Track this application'),
+    ].join('\n')),
   });
 }
 
@@ -380,10 +535,11 @@ export async function sendNewMessageEmail(
     from: env.EMAIL_FROM,
     to: recipientEmail,
     subject: `${senderName} sent you a message`,
-    html: layout(`
-      <h2 style="margin:0 0 8px;">New message from ${escapeHtml(senderName)}</h2>
-      <p style="color:#555;font-style:italic;">"${escapeHtml(preview)}"</p>
-      ${btn(threadUrl, 'Reply')}
-    `),
+    html: layout(`${senderName} sent you a message`, 'New message on one of your applications.', [
+      eyebrow('Message'),
+      heading(`New message from ${esc(senderName)}`),
+      card(esc(senderName), [`&ldquo;${esc(preview)}&rdquo;`], 'neutral'),
+      button(threadUrl, 'Reply'),
+    ].join('\n')),
   });
 }

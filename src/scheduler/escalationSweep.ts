@@ -9,8 +9,9 @@ import {
   sendReminderEmail,
   sendSecondReminderEmail,
   sendSubmitReminderEmail,
-  sendSubmitFollowupEmail,
+  // sendSubmitFollowupEmail, // paused — see the commented call site below
   sendExpiredEmail,
+  // sendReferrerExpiredEmail, // paused — see the commented call sites below
 } from '../services/email';
 
 const PENDING_STATUSES = ['submitted', 'viewed'] as const;
@@ -165,14 +166,18 @@ async function sendDay5AutoCancellations(): Promise<number> {
       await sendExpiredEmail(seeker.email, seeker.fullName, referrer.fullName, row.job.title, row.job.companyName, appsUrl)
         .catch((err) => console.error('[escalation] Day 5 expired email failed:', err));
 
-      // Referrer just gets an in-app note — they've already had two reminders.
+      // Referrer gets an in-app note. The matching email (sendReferrerExpiredEmail)
+      // is paused for now — re-enable by uncommenting when we want to test it.
+      const referrerInboxUrl = `${env.FRONTEND_URL}/applications/inbox`;
       await createNotification(
         referrer.id,
         'cv_expired',
         `${seeker.fullName}'s application expired`,
         `No decision was made within 5 days for ${row.job.title}, so it's been removed from your inbox.`,
-        `${env.FRONTEND_URL}/applications/inbox`,
+        referrerInboxUrl,
       ).catch(() => {});
+      // await sendReferrerExpiredEmail(referrer.email, referrer.fullName, seeker.fullName, row.job.title, row.job.companyName, referrerInboxUrl)
+      //   .catch((err) => console.error('[escalation] Day 5 referrer expired email failed:', err));
 
       cancelled += 1;
     } catch (err) {
@@ -261,8 +266,9 @@ async function sendSubmitFollowups(): Promise<number> {
         `This resets in 2 days if we don't hear back for ${row.job.title} at ${row.job.companyName}.`,
         inboxUrl,
       ).catch(() => {});
-      await sendSubmitFollowupEmail(referrer.email, referrer.fullName, seeker.fullName, row.job.title, row.job.companyName, inboxUrl)
-        .catch((err) => console.error('[escalation] submit followup email failed:', err));
+      // Day-3 followup email paused — one post-download reminder (day 2) is enough.
+      // await sendSubmitFollowupEmail(referrer.email, referrer.fullName, seeker.fullName, row.job.title, row.job.companyName, inboxUrl)
+      //   .catch((err) => console.error('[escalation] submit followup email failed:', err));
 
       await db.update(applications).set({ submitFollowupSentAt: new Date() }).where(eq(applications.id, row.application.id));
     } catch (err) {
@@ -315,13 +321,17 @@ async function sendSubmitAutoCancellations(): Promise<number> {
       await sendExpiredEmail(seeker.email, seeker.fullName, referrer.fullName, row.job.title, row.job.companyName, appsUrl)
         .catch((err) => console.error('[escalation] submit auto-cancel expired email failed:', err));
 
+      // Referrer email paused here too (see note in sendDay5AutoCancellations).
+      const referrerInboxUrl = `${env.FRONTEND_URL}/applications/inbox`;
       await createNotification(
         referrer.id,
         'cv_expired',
         `${seeker.fullName}'s application expired`,
         `No confirmation within 5 days of download for ${row.job.title}, so it's been removed from your inbox.`,
-        `${env.FRONTEND_URL}/applications/inbox`,
+        referrerInboxUrl,
       ).catch(() => {});
+      // await sendReferrerExpiredEmail(referrer.email, referrer.fullName, seeker.fullName, row.job.title, row.job.companyName, referrerInboxUrl)
+      //   .catch((err) => console.error('[escalation] submit auto-cancel referrer expired email failed:', err));
 
       cancelled += 1;
     } catch (err) {

@@ -8,9 +8,9 @@ import { areFriends } from '../connections/connections.service';
 import { createNotification } from '../notifications/notifications.service';
 import {
   sendCVNotificationEmail,
-  sendForwardedToHREmail,
-  sendCVViewedEmail,
-  sendCVForwardedEmail,
+  // sendForwardedToHREmail, // removed — forward-to-HR flow not supported
+  // sendCVViewedEmail, // paused — see the commented call sites below
+  // sendCVForwardedEmail, // removed — forward-to-HR flow not supported
   sendCVDownloadedEmail,
   sendInternallySubmittedEmail,
   sendNewMessageEmail,
@@ -336,34 +336,13 @@ export async function forwardToHR(applicationId: string, referrerId: string, dto
     .where(eq(applications.id, applicationId))
     .returning();
 
-  // The HR email IS the referral, so it's awaited — and on failure the status
-  // rolls back so the referrer sees the error and can simply retry.
-  try {
-    await sendForwardedToHREmail(
-      dto.hrEmail,
-      referrerUser.fullName,
-      dto.referrerNote ?? null,
-      seekerUser.fullName,
-      job.title,
-      job.companyName,
-      cvViewUrl,
-    );
-  } catch (err) {
-    console.error('[email] forward-to-HR send failed, rolling back status:', err);
-    await db
-      .update(applications)
-      .set({
-        status: app.status,
-        hrEmail: app.hrEmail,
-        referrerNote: app.referrerNote,
-        forwardedAt: app.forwardedAt,
-        updatedAt: new Date(),
-      })
-      .where(eq(applications.id, applicationId));
-    throw new AppError(502, 'EMAIL_FAILED', 'Could not send the referral email to HR — please try again');
-  }
+  // Forward-to-HR emails removed — the product doesn't support this flow
+  // (the frontend dialog is never rendered). The endpoint itself is dead code;
+  // if the feature ever ships, restore sendForwardedToHREmail (awaited, with a
+  // status rollback on failure) and sendCVForwardedEmail here.
+  void cvViewUrl;
 
-  // Notify the seeker that their CV was forwarded to HR (fire-and-forget)
+  // In-app note to the seeker, kept for completeness while the endpoint exists.
   const appsUrl = `${env.FRONTEND_URL}/applications`;
   createNotification(
     seekerUser.id,
@@ -372,14 +351,6 @@ export async function forwardToHR(applicationId: string, referrerId: string, dto
     `${referrerUser.fullName} sent your CV for ${job.title} to the HR team.`,
     appsUrl,
   ).catch(() => {});
-  sendCVForwardedEmail(
-    seekerUser.email,
-    seekerUser.fullName,
-    referrerUser.fullName,
-    job.title,
-    job.companyName,
-    appsUrl,
-  ).catch((err) => console.error('[email] CV forwarded notify failed:', err));
 
   return updated;
 }
@@ -410,8 +381,9 @@ export async function getCVPreviewPath(applicationId: string, userId: string): P
         if (job && seeker && referrer) {
           const appsUrl = `${env.FRONTEND_URL}/applications`;
           createNotification(seeker.id, 'cv_viewed', `${referrer.fullName} viewed your CV`, `Your CV for ${job.title} at ${job.companyName} was opened.`, appsUrl).catch(() => {});
-          sendCVViewedEmail(seeker.email, seeker.fullName, referrer.fullName, job.title, job.companyName, appsUrl)
-            .catch((err) => console.error('[email] CV viewed notify failed:', err));
+          // "CV viewed" email paused — the seeker's first email is the download, not the view.
+          // sendCVViewedEmail(seeker.email, seeker.fullName, referrer.fullName, job.title, job.companyName, appsUrl)
+          //   .catch((err) => console.error('[email] CV viewed notify failed:', err));
         }
       }).catch(() => {});
   }
@@ -453,15 +425,15 @@ export async function getCVPath(applicationId: string, userId: string): Promise<
             `Your CV for ${job.title} at ${job.companyName} was opened.`,
             appsUrl,
           ).catch(() => {});
-          // Email
-          sendCVViewedEmail(
-            seeker.email,
-            seeker.fullName,
-            referrer.fullName,
-            job.title,
-            job.companyName,
-            appsUrl,
-          ).catch((err) => console.error('[email] CV viewed notify failed:', err));
+          // "CV viewed" email paused — the seeker's first email is the download, not the view.
+          // sendCVViewedEmail(
+          //   seeker.email,
+          //   seeker.fullName,
+          //   referrer.fullName,
+          //   job.title,
+          //   job.companyName,
+          //   appsUrl,
+          // ).catch((err) => console.error('[email] CV viewed notify failed:', err));
         }
       })
       .catch(() => {});
