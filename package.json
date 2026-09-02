@@ -14,6 +14,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts",
+    "email:preview": "tsx src/scripts/preview-emails.ts",
     "db:reset": "tsx src/db/reset.ts",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",

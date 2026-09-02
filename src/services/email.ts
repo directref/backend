@@ -21,6 +21,11 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#39;');
 }
 
+// Every user-supplied value (names, job titles, company names, notes) MUST go
+// through this before landing in an HTML body. Subjects are plain text — no
+// escaping there, or entities would show literally.
+const esc = escapeHtml;
+
 function btn(href: string, label: string) {
   return `<a href="${href}" style="display:inline-block;background:${brand.gold};color:${brand.ink};padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-family:system-ui,sans-serif;">${label}</a>`;
 }
@@ -51,7 +56,7 @@ export async function sendVerificationEmail(to: string, token: string, name: str
     to,
     subject: `Verify your ${brand.name} account`,
     html: layout(`
-      <h2 style="margin:0 0 8px;">Welcome to ${brand.name}, ${name}!</h2>
+      <h2 style="margin:0 0 8px;">Welcome to ${brand.name}, ${esc(name)}!</h2>
       <p style="color:#555;">Please verify your email to get started:</p>
       ${btn(link, 'Verify Email')}
       <p style="font-size:12px;color:#999;margin-top:16px;">This link expires in 24 hours.</p>
@@ -91,8 +96,8 @@ export async function sendCVNotificationEmail(
     html: layout(`
       <h2 style="margin:0 0 8px;">New CV in your inbox</h2>
       <p style="color:#555;">
-        <strong>${seekerName}</strong> sent you their CV for
-        <strong>${jobTitle}</strong> at <strong>${companyName}</strong>.
+        <strong>${esc(seekerName)}</strong> sent you their CV for
+        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong>.
       </p>
       ${btn(dashboardUrl, 'View CV in Dashboard')}
     `),
@@ -116,8 +121,8 @@ export async function sendCVViewedEmail(
     html: layout(`
       <h2 style="margin:0 0 8px;">Your CV was viewed</h2>
       <p style="color:#555;">
-        <strong>${referrerName}</strong> opened your CV for
-        <strong>${jobTitle}</strong> at <strong>${companyName}</strong>.
+        <strong>${esc(referrerName)}</strong> opened your CV for
+        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong>.
       </p>
       <p style="color:#555;">They haven't forwarded it to HR yet — hang tight!</p>
       ${btn(applicationsUrl, 'View My Applications')}
@@ -140,10 +145,10 @@ export async function sendCVForwardedEmail(
     to: seekerEmail,
     subject: `Your CV was forwarded to HR at ${companyName}`,
     html: layout(`
-      <h2 style="margin:0 0 8px;">Great news, ${seekerName}!</h2>
+      <h2 style="margin:0 0 8px;">Great news, ${esc(seekerName)}!</h2>
       <p style="color:#555;">
-        <strong>${referrerName}</strong> forwarded your CV for
-        <strong>${jobTitle}</strong> at <strong>${companyName}</strong> to their HR team.
+        <strong>${esc(referrerName)}</strong> forwarded your CV for
+        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong> to their HR team.
       </p>
       <p style="color:#555;">Your application is now in front of the hiring manager. Good luck!</p>
       ${btn(applicationsUrl, 'View My Applications')}
@@ -169,10 +174,10 @@ export async function sendForwardedToHREmail(
     html: layout(`
       <h2 style="margin:0 0 8px;">Employee Referral</h2>
       <p style="color:#555;">
-        <strong>${referrerName}</strong> is referring <strong>${seekerName}</strong>
-        for <strong>${jobTitle}</strong> at <strong>${companyName}</strong>.
+        <strong>${esc(referrerName)}</strong> is referring <strong>${esc(seekerName)}</strong>
+        for <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong>.
       </p>
-      ${referrerNote ? `<blockquote style="border-left:3px solid ${brand.gold};margin:16px 0;padding-left:12px;color:#555;font-style:italic;">"${referrerNote}"</blockquote>` : ''}
+      ${referrerNote ? `<blockquote style="border-left:3px solid ${brand.gold};margin:16px 0;padding-left:12px;color:#555;font-style:italic;">"${esc(referrerNote)}"</blockquote>` : ''}
       ${btn(cvViewUrl, 'View CV')}
     `),
   });
@@ -196,8 +201,8 @@ export async function sendReminderEmail(
     html: layout(`
       <h2 style="margin:0 0 8px;">A CV is waiting on you</h2>
       <p style="color:#555;">
-        It's been a day since <strong>${seekerName}</strong> sent their CV for
-        <strong>${jobTitle}</strong> at <strong>${companyName}</strong>. They're still waiting to hear
+        It's been a day since <strong>${esc(seekerName)}</strong> sent their CV for
+        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong>. They're still waiting to hear
         whether you can refer them.
       </p>
       ${btn(inboxUrl, 'Review the CV')}
@@ -221,8 +226,8 @@ export async function sendSecondReminderEmail(
     html: layout(`
       <h2 style="margin:0 0 8px;">This one's about to reset</h2>
       <p style="color:#555;">
-        It's been 2 days since <strong>${seekerName}</strong> sent their CV for
-        <strong>${jobTitle}</strong> at <strong>${companyName}</strong>, and there's still no decision.
+        It's been 2 days since <strong>${esc(seekerName)}</strong> sent their CV for
+        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong>, and there's still no decision.
       </p>
       <p style="color:#555;">
         <strong>3 more days</strong> and this application resets automatically, refunding their credit.
@@ -250,8 +255,8 @@ export async function sendExpiredEmail(
     html: layout(`
       <h2 style="margin:0 0 8px;">This one closed without an answer</h2>
       <p style="color:#555;">
-        <strong>${referrerName}</strong> didn't respond to your CV for
-        <strong>${jobTitle}</strong> at <strong>${companyName}</strong> within 5 days, so we've closed
+        <strong>${esc(referrerName)}</strong> didn't respond to your CV for
+        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong> within 5 days, so we've closed
         this application automatically.
       </p>
       <p style="color:#555;"><strong>Your credit has been refunded</strong> — use it on another role whenever you're ready.</p>
@@ -276,10 +281,10 @@ export async function sendCVDownloadedEmail(
     to: seekerEmail,
     subject: `${referrerName} downloaded your CV`,
     html: layout(`
-      <h2 style="margin:0 0 8px;">Good sign, ${seekerName}!</h2>
+      <h2 style="margin:0 0 8px;">Good sign, ${esc(seekerName)}!</h2>
       <p style="color:#555;">
-        <strong>${referrerName}</strong> downloaded your CV for
-        <strong>${jobTitle}</strong> at <strong>${companyName}</strong> — they're moving forward with it.
+        <strong>${esc(referrerName)}</strong> downloaded your CV for
+        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong> — they're moving forward with it.
       </p>
       <p style="color:#555;">We'll let you know as soon as it's submitted into their internal system.</p>
       ${btn(applicationsUrl, 'View My Applications')}
@@ -303,8 +308,8 @@ export async function sendSubmitReminderEmail(
     html: layout(`
       <h2 style="margin:0 0 8px;">Quick check-in</h2>
       <p style="color:#555;">
-        You downloaded <strong>${seekerName}</strong>'s CV for
-        <strong>${jobTitle}</strong> at <strong>${companyName}</strong> a couple of days ago.
+        You downloaded <strong>${esc(seekerName)}</strong>'s CV for
+        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong> a couple of days ago.
         Once it's in your company's system, let them know — it only takes a click.
       </p>
       ${btn(inboxUrl, 'Confirm Submission')}
@@ -328,8 +333,8 @@ export async function sendSubmitFollowupEmail(
     html: layout(`
       <h2 style="margin:0 0 8px;">Still waiting to hear back from you</h2>
       <p style="color:#555;">
-        <strong>${seekerName}</strong>'s CV for <strong>${jobTitle}</strong> at
-        <strong>${companyName}</strong> is still marked as downloaded, not submitted.
+        <strong>${esc(seekerName)}</strong>'s CV for <strong>${esc(jobTitle)}</strong> at
+        <strong>${esc(companyName)}</strong> is still marked as downloaded, not submitted.
       </p>
       <p style="color:#555;"><strong>2 more days</strong> and this resets automatically, refunding their credit.</p>
       ${btn(inboxUrl, 'Confirm Submission')}
@@ -351,10 +356,10 @@ export async function sendInternallySubmittedEmail(
     to: seekerEmail,
     subject: `Your CV was submitted internally at ${companyName}`,
     html: layout(`
-      <h2 style="margin:0 0 8px;">Great news, ${seekerName}!</h2>
+      <h2 style="margin:0 0 8px;">Great news, ${esc(seekerName)}!</h2>
       <p style="color:#555;">
-        <strong>${referrerName}</strong> confirmed your CV for
-        <strong>${jobTitle}</strong> at <strong>${companyName}</strong> has been submitted into their
+        <strong>${esc(referrerName)}</strong> confirmed your CV for
+        <strong>${esc(jobTitle)}</strong> at <strong>${esc(companyName)}</strong> has been submitted into their
         internal system. Good luck!
       </p>
       ${btn(applicationsUrl, 'View My Applications')}

@@ -1,6 +1,6 @@
 import { db } from '../config/db';
 import { applications, jobs, users, applicationMessages } from '../db/schema';
-import { eq, and, lte, isNull, inArray } from 'drizzle-orm';
+import { eq, and, lte, gt, isNull, inArray } from 'drizzle-orm';
 import { env } from '../config/env';
 import { ESCALATION_MS, SUBMIT_ESCALATION_MS } from '../config/escalation';
 import { createNotification } from '../modules/notifications/notifications.service';
@@ -31,9 +31,13 @@ async function seekerHasMessaged(applicationId: string, seekerId: string): Promi
 
 // ── Clock A — from CV sent, while status is submitted/viewed ──────────────────
 
-/** Day 1 — nudge the referrer on every application still awaiting a decision. */
+/** Day 1 — nudge the referrer on every application still awaiting a decision.
+ *  Only fires inside the Day-1→Day-2 window: an application already old enough
+ *  for the stronger Day-2 reminder (first sweep after downtime, or pre-existing
+ *  data) skips straight there instead of getting both nudges at once. */
 async function sendDay1Reminders(): Promise<number> {
   const cutoff = new Date(Date.now() - ESCALATION_MS.REMINDER);
+  const escalateCutoff = new Date(Date.now() - ESCALATION_MS.ESCALATE);
   const rows = await db
     .select({
       application: applications,
@@ -44,6 +48,7 @@ async function sendDay1Reminders(): Promise<number> {
     .where(and(
       inArray(applications.status, PENDING_STATUSES),
       lte(applications.createdAt, cutoff),
+      gt(applications.createdAt, escalateCutoff),
       isNull(applications.reminderSentAt),
     ));
 
@@ -76,6 +81,9 @@ async function sendDay1Reminders(): Promise<number> {
  *  old Day-3 seeker notice; the seeker just isn't told until it resolves. */
 async function sendDay2SecondReminders(): Promise<number> {
   const cutoff = new Date(Date.now() - ESCALATION_MS.ESCALATE);
+  // Past the auto-cancel line this email would contradict the cancellation
+  // notice, so the window closes there.
+  const autoCancelCutoff = new Date(Date.now() - ESCALATION_MS.AUTO_CANCEL);
   const rows = await db
     .select({
       application: applications,
@@ -86,6 +94,7 @@ async function sendDay2SecondReminders(): Promise<number> {
     .where(and(
       inArray(applications.status, PENDING_STATUSES),
       lte(applications.createdAt, cutoff),
+      gt(applications.createdAt, autoCancelCutoff),
       isNull(applications.escalatedAt),
     ));
 
@@ -179,6 +188,8 @@ async function sendDay5AutoCancellations(): Promise<number> {
 /** Day 2 from download — ask the referrer whether they submitted it internally. */
 async function sendSubmitReminders(): Promise<number> {
   const cutoff = new Date(Date.now() - SUBMIT_ESCALATION_MS.REMINDER);
+  // Same windowing as Clock A: past the followup line, skip straight to it.
+  const followupCutoff = new Date(Date.now() - SUBMIT_ESCALATION_MS.FOLLOWUP);
   const rows = await db
     .select({
       application: applications,
@@ -189,6 +200,7 @@ async function sendSubmitReminders(): Promise<number> {
     .where(and(
       eq(applications.status, 'forwarded'),
       lte(applications.forwardedAt, cutoff),
+      gt(applications.forwardedAt, followupCutoff),
       isNull(applications.submitReminderSentAt),
     ));
 
@@ -220,6 +232,7 @@ async function sendSubmitReminders(): Promise<number> {
 /** Day 3 from download — a final reminder before this heads toward auto-cancel. */
 async function sendSubmitFollowups(): Promise<number> {
   const cutoff = new Date(Date.now() - SUBMIT_ESCALATION_MS.FOLLOWUP);
+  const autoCancelCutoff = new Date(Date.now() - SUBMIT_ESCALATION_MS.AUTO_CANCEL);
   const rows = await db
     .select({
       application: applications,
@@ -230,6 +243,7 @@ async function sendSubmitFollowups(): Promise<number> {
     .where(and(
       eq(applications.status, 'forwarded'),
       lte(applications.forwardedAt, cutoff),
+      gt(applications.forwardedAt, autoCancelCutoff),
       isNull(applications.submitFollowupSentAt),
     ));
 
@@ -319,17 +333,20 @@ async function sendSubmitAutoCancellations(): Promise<number> {
 
 /** Runs both escalation ladders once. Safe to call repeatedly — every step is
  *  idempotent per application (guarded by its own *_At column), so re-running
- *  never double-sends. */
+ *  never double-sends.
+ *
+ *  Phases run sequentially, cancellations first: an application past the
+ *  auto-cancel line must be expired before the reminder queries run, so its
+ *  status flips out of PENDING_STATUSES/forwarded and it can't also receive a
+ *  "please respond" the same tick. */
 export async function runEscalationSweep(): Promise<void> {
   try {
-    const [reminded, escalated, cancelled, submitReminded, submitFollowedUp, submitCancelled] = await Promise.all([
-      sendDay1Reminders(),
-      sendDay2SecondReminders(),
-      sendDay5AutoCancellations(),
-      sendSubmitReminders(),
-      sendSubmitFollowups(),
-      sendSubmitAutoCancellations(),
-    ]);
+    const cancelled = await sendDay5AutoCancellations();
+    const submitCancelled = await sendSubmitAutoCancellations();
+    const escalated = await sendDay2SecondReminders();
+    const reminded = await sendDay1Reminders();
+    const submitFollowedUp = await sendSubmitFollowups();
+    const submitReminded = await sendSubmitReminders();
     const total = reminded + escalated + cancelled + submitReminded + submitFollowedUp + submitCancelled;
     if (total) {
       console.log(

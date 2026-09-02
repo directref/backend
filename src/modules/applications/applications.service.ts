@@ -322,17 +322,48 @@ export async function forwardToHR(applicationId: string, referrerId: string, dto
 
   const cvViewUrl = `${env.FRONTEND_URL}/applications/${applicationId}/cv`;
 
-  await sendForwardedToHREmail(
-    dto.hrEmail,
-    referrerUser.fullName,
-    dto.referrerNote ?? null,
-    seekerUser.fullName,
-    job.title,
-    job.companyName,
-    cvViewUrl,
-  );
+  // Commit the state change BEFORE emailing HR: if the update fails, HR never
+  // hears about a referral that doesn't exist, and a retry can't double-send.
+  const [updated] = await db
+    .update(applications)
+    .set({
+      status: 'forwarded',
+      hrEmail: dto.hrEmail,
+      referrerNote: dto.referrerNote,
+      forwardedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(applications.id, applicationId))
+    .returning();
 
-  // Notify the seeker that their CV was forwarded to HR
+  // The HR email IS the referral, so it's awaited — and on failure the status
+  // rolls back so the referrer sees the error and can simply retry.
+  try {
+    await sendForwardedToHREmail(
+      dto.hrEmail,
+      referrerUser.fullName,
+      dto.referrerNote ?? null,
+      seekerUser.fullName,
+      job.title,
+      job.companyName,
+      cvViewUrl,
+    );
+  } catch (err) {
+    console.error('[email] forward-to-HR send failed, rolling back status:', err);
+    await db
+      .update(applications)
+      .set({
+        status: app.status,
+        hrEmail: app.hrEmail,
+        referrerNote: app.referrerNote,
+        forwardedAt: app.forwardedAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(applications.id, applicationId));
+    throw new AppError(502, 'EMAIL_FAILED', 'Could not send the referral email to HR — please try again');
+  }
+
+  // Notify the seeker that their CV was forwarded to HR (fire-and-forget)
   const appsUrl = `${env.FRONTEND_URL}/applications`;
   createNotification(
     seekerUser.id,
@@ -349,18 +380,6 @@ export async function forwardToHR(applicationId: string, referrerId: string, dto
     job.companyName,
     appsUrl,
   ).catch((err) => console.error('[email] CV forwarded notify failed:', err));
-
-  const [updated] = await db
-    .update(applications)
-    .set({
-      status: 'forwarded',
-      hrEmail: dto.hrEmail,
-      referrerNote: dto.referrerNote,
-      forwardedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(applications.id, applicationId))
-    .returning();
 
   return updated;
 }
@@ -391,7 +410,8 @@ export async function getCVPreviewPath(applicationId: string, userId: string): P
         if (job && seeker && referrer) {
           const appsUrl = `${env.FRONTEND_URL}/applications`;
           createNotification(seeker.id, 'cv_viewed', `${referrer.fullName} viewed your CV`, `Your CV for ${job.title} at ${job.companyName} was opened.`, appsUrl).catch(() => {});
-          sendCVViewedEmail(seeker.email, seeker.fullName, referrer.fullName, job.title, job.companyName, appsUrl).catch(() => {});
+          sendCVViewedEmail(seeker.email, seeker.fullName, referrer.fullName, job.title, job.companyName, appsUrl)
+            .catch((err) => console.error('[email] CV viewed notify failed:', err));
         }
       }).catch(() => {});
   }
