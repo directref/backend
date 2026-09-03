@@ -4,7 +4,6 @@ import { eq, and, lte, gt, isNull, inArray } from 'drizzle-orm';
 import { env } from '../config/env';
 import { ESCALATION_MS, SUBMIT_ESCALATION_MS } from '../config/escalation';
 import { createNotification } from '../modules/notifications/notifications.service';
-import { refundCredit } from '../modules/credits/credits.service';
 import {
   sendReminderEmail,
   sendSecondReminderEmail,
@@ -110,7 +109,7 @@ async function sendDay2SecondReminders(): Promise<number> {
         referrer.id,
         'cv_escalated',
         `${seeker.fullName}'s CV resets in 3 days — please respond`,
-        `Still no decision on their CV for ${row.job.title} at ${row.job.companyName}. If nothing happens by day 5, it resets and their credit is refunded.`,
+        `Still no decision on their CV for ${row.job.title} at ${row.job.companyName}. If nothing happens by day 5, the application auto-closes.`,
         inboxUrl,
       ).catch(() => {});
       await sendSecondReminderEmail(referrer.email, referrer.fullName, seeker.fullName, row.job.title, row.job.companyName, inboxUrl)
@@ -153,13 +152,11 @@ async function sendDay5AutoCancellations(): Promise<number> {
         .set({ status: 'expired', autoCancelledAt: new Date(), updatedAt: new Date() })
         .where(eq(applications.id, row.application.id));
 
-      await refundCredit(seeker.id);
-
       const appsUrl = `${env.FRONTEND_URL}/applications`;
       await createNotification(
         seeker.id,
         'cv_expired',
-        `No response from ${referrer.fullName} — your credit was refunded`,
+        `No response from ${referrer.fullName}`,
         `Your application for ${row.job.title} at ${row.job.companyName} closed after 5 days with no response.`,
         appsUrl,
       ).catch(() => {});
@@ -308,14 +305,12 @@ async function sendSubmitAutoCancellations(): Promise<number> {
         .set({ status: 'expired', autoCancelledAt: new Date(), updatedAt: new Date() })
         .where(eq(applications.id, row.application.id));
 
-      await refundCredit(seeker.id);
-
       const appsUrl = `${env.FRONTEND_URL}/applications`;
       await createNotification(
         seeker.id,
         'cv_expired',
-        `No confirmation from ${referrer.fullName} — your credit was refunded`,
-        `${referrer.fullName} downloaded your CV for ${row.job.title} at ${row.job.companyName} but never confirmed it was submitted, so we've closed this out and refunded your credit.`,
+        `No confirmation from ${referrer.fullName}`,
+        `${referrer.fullName} downloaded your CV for ${row.job.title} at ${row.job.companyName} but never confirmed it was submitted, so we've closed this out.`,
         appsUrl,
       ).catch(() => {});
       await sendExpiredEmail(seeker.email, seeker.fullName, referrer.fullName, row.job.title, row.job.companyName, appsUrl)

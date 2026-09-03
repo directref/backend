@@ -80,10 +80,11 @@ async function groupBySourceUrl(rows: JobReferrerRow[]): Promise<GroupedJob[]> {
   return grouped;
 }
 
-/** Create a new job posting — costs 1 credit, same shared balance as sending a C.V.
- *  Gated to referrers with a verified work email at the company being posted
- *  for (see services/companyMatch.ts), checked before spending the credit so
- *  a blocked attempt never costs one. */
+/** Create a new job posting — costs 1 credit (credits currently only gate
+ *  this, the referrer side; sending a C.V. doesn't spend one). Also gated
+ *  to referrers with a verified work email at the company being posted for
+ *  (see services/companyMatch.ts), checked before spending the credit so a
+ *  blocked attempt never costs one. */
 export async function createJob(referrerId: string, dto: CreateJobDto) {
   const [referrer] = await db
     .select({ workEmail: users.workEmail, workEmailVerified: users.workEmailVerified })

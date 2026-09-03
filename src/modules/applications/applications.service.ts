@@ -16,7 +16,6 @@ import {
   sendNewMessageEmail,
 } from '../../services/email';
 import { env } from '../../config/env';
-import { spendCredit } from '../credits/credits.service';
 import type { SubmitApplicationDto, ForwardToHRDto } from './applications.schemas';
 
 /** Submit a CV to a referrer for a specific job */
@@ -57,16 +56,8 @@ export async function submitApplication(
     throw new AppError(409, 'ALREADY_APPLIED', 'You have already sent your CV for this job');
   }
 
-  // 4. Spend a credit — free first, then purchased. Throws OUT_OF_CREDITS
-  //    (402) if the seeker has neither, same shared balance as posting a job.
-  try {
-    await spendCredit(seekerId);
-  } catch (err) {
-    fs.unlink(file.path, () => {});
-    throw err;
-  }
-
-  // 5. Insert application
+  // 4. Insert application — sending a CV is free for seekers; credits only
+  //    gate the referrer side (posting a job), see jobs.service.ts createJob.
   const [application] = await db.insert(applications).values({
     jobId: dto.jobId,
     seekerId,
@@ -78,7 +69,7 @@ export async function submitApplication(
     coverNote: dto.coverNote,
   }).returning();
 
-  // 6. Notify referrer — in-app + email (fire-and-forget)
+  // 5. Notify referrer — in-app + email (fire-and-forget)
   const [referrer] = await db.select().from(users).where(eq(users.id, job.referrerId)).limit(1);
   const [seeker] = await db.select().from(users).where(eq(users.id, seekerId)).limit(1);
 

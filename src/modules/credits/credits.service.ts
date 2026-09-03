@@ -110,8 +110,8 @@ export async function getBalance(userId: string): Promise<CreditBalance> {
 /**
  * Spends exactly one credit — oldest non-expired grant first (FIFO),
  * regardless of whether it came from signup, a monthly grant, or a refund.
- * Throws OUT_OF_CREDITS if none is available. Used by both "Send My C.V."
- * and "Post a job" — one shared balance, no separate allowance per action.
+ * Throws OUT_OF_CREDITS if none is available. Currently only called from
+ * the referrer side ("Post a job") — sending a C.V. doesn't spend one.
  */
 export async function spendCredit(userId: string): Promise<void> {
   const [oldest] = await db
@@ -136,7 +136,10 @@ export async function spendCredit(userId: string): Promise<void> {
 
 /**
  * Refunds exactly one credit to the user's general balance (never-expiring,
- * untagged by origin). Used by the Day-5 auto-cancel sweep.
+ * untagged by origin). Not currently called anywhere — sending a C.V. no
+ * longer spends a credit, so the escalation sweep's Day-5 auto-cancel has
+ * nothing to refund. Kept for a manual/support-tooling refund on the
+ * referrer's job-posting credit, should that ever be needed.
  */
 export async function refundCredit(userId: string): Promise<void> {
   await db.insert(creditPurchases).values({

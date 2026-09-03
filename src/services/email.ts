@@ -344,7 +344,7 @@ export async function sendReminderEmail(
       badge('Awaiting your review', 'gold'),
       heading('A C.V. has been waiting a day'),
       text(`${strong(seekerName)} is waiting on ${strong(jobTitle)}. A minute of your time either moves them forward or frees them up to try elsewhere.`),
-      card('4 days left', ['After 5 days the application expires and the seeker is refunded.'], 'neutral'),
+      card('4 days left', ['After 5 days the application closes automatically.'], 'neutral'),
       button(inboxUrl, 'Open my C.V. inbox'),
     ].join('\n')),
   });
@@ -363,7 +363,7 @@ export async function sendSecondReminderEmail(
     from: env.EMAIL_FROM,
     to: referrerEmail,
     subject: `2 days on: ${seekerName}'s C.V. for ${jobTitle}`,
-    html: layout(`2 days on: ${seekerName}'s C.V. for ${jobTitle}`, '3 days before it expires and the credit is refunded.', [
+    html: layout(`2 days on: ${seekerName}'s C.V. for ${jobTitle}`, '3 days before it expires.', [
       eyebrow('Reminder · Day 2'),
       badge('Awaiting your review', 'gold'),
       heading(`It's been 2 days — 3 to go`),
@@ -378,8 +378,10 @@ export async function sendSecondReminderEmail(
   });
 }
 
-/** Day 5 — the application auto-closed with no response; the seeker's credit is refunded.
- *  Reused by both clocks (never looked at it, or downloaded but never confirmed). */
+/** Day 5 — the application auto-closed with no response. Sending a C.V. is
+ *  free (credits only gate the referrer's job-posting side), so this is
+ *  purely a status update, not a refund notice. Reused by both clocks
+ *  (never looked at it, or downloaded but never confirmed). */
 export async function sendExpiredEmail(
   seekerEmail: string,
   seekerName: string,
@@ -391,16 +393,12 @@ export async function sendExpiredEmail(
   await resend.emails.send({
     from: env.EMAIL_FROM,
     to: seekerEmail,
-    subject: `Your credit is back — ${jobTitle} expired`,
-    html: layout(`Your credit is back — ${jobTitle} expired`, 'No response from the referrer in 5 days, so we refunded you.', [
+    subject: `${jobTitle} — no response, application closed`,
+    html: layout(`${jobTitle} — no response, application closed`, 'No response from the referrer in 5 days.', [
       eyebrow('Application update'),
       badge('Expired', 'expired'),
-      heading('No response, so your credit is back'),
-      text(`${strong(referrerName)} didn't act on your C.V. for ${strong(jobTitle)} within 5 days, so we closed the application and ${strong('refunded your credit')}. You can spend it on another role right now.`),
-      card('1 credit returned to your balance', [
-        'Nothing was submitted on your behalf.',
-        'Nothing was shared with the company.',
-      ], 'gold'),
+      heading('No response, so we closed this one out'),
+      text(`${strong(referrerName)} didn't act on your C.V. for ${strong(jobTitle)} within 5 days, so we closed the application. Nothing was submitted on your behalf, and nothing was shared with the company.`),
       button(`${env.FRONTEND_URL}/jobs`, 'Find another referrer'),
       link(applicationsUrl, 'See all my applications'),
     ].join('\n')),
@@ -420,13 +418,13 @@ export async function sendReferrerExpiredEmail(
     from: env.EMAIL_FROM,
     to: referrerEmail,
     subject: `Expired: ${seekerName}'s C.V. for ${jobTitle}`,
-    html: layout(`Expired: ${seekerName}'s C.V. for ${jobTitle}`, 'No action in 5 days, so we closed it and refunded the seeker.', [
+    html: layout(`Expired: ${seekerName}'s C.V. for ${jobTitle}`, 'No action in 5 days, so we closed it out.', [
       eyebrow('Reminder · Day 5'),
       badge('Expired', 'expired'),
       heading('This application has expired'),
-      text(`${strong(seekerName)}'s C.V. for ${strong(jobTitle)} closed after 5 days with no action, and their credit was refunded. It no longer appears in your inbox.`),
+      text(`${strong(seekerName)}'s C.V. for ${strong(jobTitle)} closed after 5 days with no action. It no longer appears in your inbox.`),
       card('Keeping your response rate healthy', [
-        'Seekers see your response rate before they spend a credit.',
+        'Seekers see your response rate before choosing who to send their C.V. to.',
         'Acting — even a decline — keeps it strong.',
       ], 'neutral'),
       button(inboxUrl, 'See my open C.V.s'),
@@ -484,7 +482,7 @@ export async function sendSubmitReminderEmail(
       text(`You downloaded ${strong(seekerName)}'s C.V. for ${strong(jobTitle)} two days ago. If you've submitted it through your internal referral programme, mark it in DirectRef — that's the update they're waiting for.`),
       card('Two taps, and they know', [
         'Submitted internally &rarr; we notify the seeker it reached HR.',
-        'Not a fit &rarr; we close it honestly and refund their credit.',
+        'Not a fit &rarr; we close it out honestly, and they know where they stand.',
       ], 'info'),
       button(inboxUrl, 'Update the status'),
     ].join('\n')),
@@ -504,12 +502,12 @@ export async function sendSubmitFollowupEmail(
     from: env.EMAIL_FROM,
     to: referrerEmail,
     subject: `Last check: did ${seekerName}'s C.V. get submitted?`,
-    html: layout(`Last check: did ${seekerName}'s C.V. get submitted?`, '2 days before this resets and the credit is refunded.', [
+    html: layout(`Last check: did ${seekerName}'s C.V. get submitted?`, '2 days before this resets automatically.', [
       eyebrow('Status check · Day 3'),
       badge('Downloaded', 'info'),
       heading('Last check: did it go in?'),
       text(`${strong(seekerName)}'s C.V. for ${strong(jobTitle)} at ${strong(companyName)} is still marked as downloaded, not submitted.`),
-      card('2 days left', ['After that this resets automatically and the seeker&#39;s credit is refunded.'], 'gold'),
+      card('2 days left', ['After that this resets automatically and the application closes.'], 'gold'),
       button(inboxUrl, 'Update the status'),
     ].join('\n')),
   });

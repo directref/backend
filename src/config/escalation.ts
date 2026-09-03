@@ -6,7 +6,7 @@
 export const ESCALATION_DAYS = {
   REMINDER: 1,    // referrer gets a nudge
   ESCALATE: 2,    // referrer gets a stronger reminder with a deadline
-  AUTO_CANCEL: 5, // application closes, seeker's credit is refunded
+  AUTO_CANCEL: 5, // application auto-closes
 } as const;
 
 // Clock B — from download (forwardedAt), while status is forwarded and the
@@ -14,7 +14,7 @@ export const ESCALATION_DAYS = {
 export const SUBMIT_ESCALATION_DAYS = {
   REMINDER: 2,    // referrer asked whether they submitted it internally
   FOLLOWUP: 3,    // referrer gets a final reminder
-  AUTO_CANCEL: 5, // application closes, seeker's credit is refunded
+  AUTO_CANCEL: 5, // application auto-closes
 } as const;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
