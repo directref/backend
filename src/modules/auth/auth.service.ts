@@ -15,7 +15,11 @@ export type User = InferSelectModel<typeof users>;
 
 /** Strip sensitive fields before returning user to client */
 export function sanitizeUser(user: User | Express.User) {
-  const { passwordHash: _, emailVerifyToken: __, resetToken: ___, resetTokenExp: ____, ...safe } = user as User;
+  const {
+    passwordHash: _, emailVerifyToken: __, resetToken: ___, resetTokenExp: ____,
+    workEmailVerifyToken: _____, workEmailVerifyTokenExp: ______,
+    ...safe
+  } = user as User;
   return safe;
 }
 
@@ -100,6 +104,24 @@ export async function resetPassword(token: string, newPassword: string): Promise
     passwordHash,
     resetToken: null,
     resetTokenExp: null,
+    updatedAt: new Date(),
+  }).where(eq(users.id, user.id));
+}
+
+/** Completes work-email verification (see users.service.ts requestWorkEmailVerification
+ *  for how the token is issued). No auth required — clicking the emailed
+ *  link, which only the mailbox owner could receive, is the proof. */
+export async function verifyWorkEmail(token: string): Promise<void> {
+  const [user] = await db.select().from(users).where(eq(users.workEmailVerifyToken, token)).limit(1);
+
+  if (!user || !user.workEmailVerifyTokenExp || user.workEmailVerifyTokenExp < new Date()) {
+    throw new AppError(400, 'INVALID_TOKEN', 'Invalid or expired verification token');
+  }
+
+  await db.update(users).set({
+    workEmailVerified: true,
+    workEmailVerifyToken: null,
+    workEmailVerifyTokenExp: null,
     updatedAt: new Date(),
   }).where(eq(users.id, user.id));
 }

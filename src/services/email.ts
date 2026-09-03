@@ -196,6 +196,26 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
   });
 }
 
+/** Confirms ownership of a work email so job postings for that company can
+ *  be unlocked (see services/companyMatch.ts, jobs.service.ts createJob). */
+export async function sendWorkEmailVerificationEmail(to: string, name: string, token: string): Promise<void> {
+  const verifyUrl = `${env.FRONTEND_URL}/verify-work-email?token=${token}`;
+  const subject = 'Confirm your work email';
+  await resend.emails.send({
+    from: env.EMAIL_FROM,
+    to,
+    subject,
+    html: layout(subject, 'Confirm this is you — the link is valid for 1 hour.', [
+      eyebrow('Account'),
+      heading(`Confirm it's you, ${esc(name)}`),
+      text(`We use your work email to confirm which company you work at, so you can post jobs for that company. Click below to confirm ${strong(to)} is yours.`),
+      button(verifyUrl, 'Confirm my work email'),
+      text('This link is valid for 1 hour.'),
+      text(`If you didn't request this, you can safely ignore this email — nothing changes.`),
+    ].join('\n')),
+  });
+}
+
 // ── CV received (notify referrer) ─────────────────────────────────────────────
 
 export async function sendCVNotificationEmail(

@@ -35,6 +35,16 @@ export const users = pgTable(
     // migration, from the old "1 free credit that resets monthly" model.
     freeCreditsMonth: varchar('free_credits_month', { length: 7 }),
     freeCreditsUsed: boolean('free_credits_used').notNull().default(false),
+    // Work email — proves which company this referrer actually works at, so
+    // job creation can be gated to postings for that company (see
+    // services/companyMatch.ts and jobs.service.ts createJob). Verification
+    // mirrors the account email-verify flow but with an explicit expiry,
+    // like password reset. Re-submitting replaces any prior (unverified or
+    // verified) work email — one at a time.
+    workEmail: varchar('work_email', { length: 320 }),
+    workEmailVerified: boolean('work_email_verified').notNull().default(false),
+    workEmailVerifyToken: varchar('work_email_verify_token', { length: 64 }),
+    workEmailVerifyTokenExp: timestamp('work_email_verify_token_exp', { withTimezone: true }),
     // Onboarding + invite
     onboarded: boolean('onboarded').notNull().default(false),
     inviteCode: varchar('invite_code', { length: 16 }).unique(),

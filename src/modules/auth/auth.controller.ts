@@ -63,6 +63,11 @@ export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
   res.json({ message: 'Email verified successfully' });
 });
 
+export const verifyWorkEmail = asyncHandler(async (req: Request, res: Response) => {
+  await authService.verifyWorkEmail(String(req.params.token));
+  res.json({ message: 'Work email verified successfully' });
+});
+
 export const forgotPassword = asyncHandler(async (req: Request, res: Response) => {
   await authService.forgotPassword(req.body.email);
   res.json({ message: 'If that email exists, a reset link has been sent' });

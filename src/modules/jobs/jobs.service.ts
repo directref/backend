@@ -3,6 +3,7 @@ import { jobs, connections, users } from '../../db/schema';
 import { eq, and, or, ilike, desc, inArray, ne, sql } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler';
 import { scrapeJobUrl } from '../../services/jobScraper';
+import { extractEmailDomain, emailMatchesJob } from '../../services/companyMatch';
 import { getResponseStatsForReferrers, type ResponseStats } from '../applications/applications.service';
 import { spendCredit } from '../credits/credits.service';
 import type { CreateJobDto, UpdateJobDto } from './jobs.schemas';
@@ -79,8 +80,32 @@ async function groupBySourceUrl(rows: JobReferrerRow[]): Promise<GroupedJob[]> {
   return grouped;
 }
 
-/** Create a new job posting — costs 1 credit, same shared balance as sending a C.V. */
+/** Create a new job posting — costs 1 credit, same shared balance as sending a C.V.
+ *  Gated to referrers with a verified work email at the company being posted
+ *  for (see services/companyMatch.ts), checked before spending the credit so
+ *  a blocked attempt never costs one. */
 export async function createJob(referrerId: string, dto: CreateJobDto) {
+  const [referrer] = await db
+    .select({ workEmail: users.workEmail, workEmailVerified: users.workEmailVerified })
+    .from(users)
+    .where(eq(users.id, referrerId))
+    .limit(1);
+
+  if (!referrer?.workEmailVerified || !referrer.workEmail) {
+    throw new AppError(
+      403,
+      'WORK_EMAIL_REQUIRED',
+      'Verify your work email in Settings before posting a job',
+    );
+  }
+  if (!emailMatchesJob(extractEmailDomain(referrer.workEmail), dto.sourceUrl, dto.companyName)) {
+    throw new AppError(
+      403,
+      'COMPANY_MISMATCH',
+      `Your verified work email doesn't match ${dto.companyName} — you can only post jobs for the company you work at`,
+    );
+  }
+
   await spendCredit(referrerId);
 
   const [job] = await db.insert(jobs).values({

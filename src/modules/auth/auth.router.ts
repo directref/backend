@@ -19,6 +19,7 @@ router.post('/logout', requireAuth, ctrl.logout);
 router.get('/me', requireAuth, ctrl.me);
 router.post('/refresh', ctrl.refresh);
 router.get('/verify-email/:token', ctrl.verifyEmail);
+router.get('/verify-work-email/:token', ctrl.verifyWorkEmail);
 router.post('/forgot-password', authLimiter, validate(ForgotPasswordSchema), ctrl.forgotPassword);
 router.post('/reset-password', validate(ResetPasswordSchema), ctrl.resetPassword);
 

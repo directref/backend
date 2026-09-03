@@ -18,6 +18,10 @@ export const UpdateProfileSchema = z.object({
   linkedinId: z.literal(null).optional(),
 });
 
+export const SubmitWorkEmailSchema = z.object({
+  workEmail: z.string().email().max(320),
+});
+
 export const SearchUsersSchema = z.object({
   q: z.string().max(100).default(''),
   page: z.coerce.number().int().min(1).default(1),

@@ -13,6 +13,11 @@ export const updateMe = asyncHandler(async (req: Request, res: Response) => {
   res.json({ data: user });
 });
 
+export const submitWorkEmail = asyncHandler(async (req: Request, res: Response) => {
+  await usersService.requestWorkEmailVerification(req.user!.id, req.body.workEmail);
+  res.json({ message: 'Verification email sent' });
+});
+
 export const getUser = asyncHandler(async (req: Request, res: Response) => {
   const user = await usersService.getProfile(String(req.params.id));
   res.json({ data: user });
