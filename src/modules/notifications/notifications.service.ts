@@ -15,7 +15,8 @@ export type NotificationType =
   | 'cv_internally_submitted'  // referrer confirmed they submitted the CV internally
   | 'application_message'
   | 'connection_request'
-  | 'connection_accepted';
+  | 'connection_accepted'
+  | 'job_deletion_warning';   // inactive job posting will be permanently deleted in 3 days
 
 /** Create a notification for a user */
 export async function createNotification(

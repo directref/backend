@@ -191,6 +191,18 @@ export async function getMyJobs(referrerId: string, page: number, limit: number)
     .offset(offset);
 }
 
+/** isActive flipping off starts the 30-day deletion clock; flipping back on
+ *  cancels it, so a later re-deactivation always gets a fresh 30 days. */
+function deletionClockFields(existing: JobRow, nextIsActive: boolean | undefined): Partial<JobRow> {
+  if (nextIsActive === false && existing.isActive) {
+    return { deactivatedAt: new Date(), deletionWarningEmailSentAt: null };
+  }
+  if (nextIsActive === true && !existing.isActive) {
+    return { deactivatedAt: null, deletionWarningEmailSentAt: null };
+  }
+  return {};
+}
+
 export async function updateJob(jobId: string, referrerId: string, dto: UpdateJobDto) {
   const [existing] = await db.select().from(jobs).where(eq(jobs.id, jobId)).limit(1);
   if (!existing) throw new AppError(404, 'JOB_NOT_FOUND', 'Job not found');
@@ -198,7 +210,12 @@ export async function updateJob(jobId: string, referrerId: string, dto: UpdateJo
 
   const [updated] = await db
     .update(jobs)
-    .set({ ...dto, bonusAmount: dto.bonusAmount ? String(dto.bonusAmount) : undefined, updatedAt: new Date() })
+    .set({
+      ...dto,
+      bonusAmount: dto.bonusAmount ? String(dto.bonusAmount) : undefined,
+      ...deletionClockFields(existing, dto.isActive),
+      updatedAt: new Date(),
+    })
     .where(eq(jobs.id, jobId))
     .returning();
   return updated;
@@ -208,7 +225,9 @@ export async function deleteJob(jobId: string, referrerId: string): Promise<void
   const [existing] = await db.select().from(jobs).where(eq(jobs.id, jobId)).limit(1);
   if (!existing) throw new AppError(404, 'JOB_NOT_FOUND', 'Job not found');
   if (existing.referrerId !== referrerId) throw new AppError(403, 'FORBIDDEN', 'You do not own this job posting');
-  await db.update(jobs).set({ isActive: false, updatedAt: new Date() }).where(eq(jobs.id, jobId));
+  await db.update(jobs)
+    .set({ isActive: false, ...deletionClockFields(existing, false), updatedAt: new Date() })
+    .where(eq(jobs.id, jobId));
 }
 
 export async function scrapeJob(url: string) {

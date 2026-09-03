@@ -543,3 +543,31 @@ export async function sendNewMessageEmail(
     ].join('\n')),
   });
 }
+
+// ── Job posting cleanup ─────────────────────────────────────────────────────
+
+/** 3 days before an inactive job posting is permanently deleted. */
+export async function sendJobDeletionWarningEmail(
+  referrerEmail: string,
+  referrerName: string,
+  jobTitle: string,
+  companyName: string,
+  jobsUrl: string,
+): Promise<void> {
+  await resend.emails.send({
+    from: env.EMAIL_FROM,
+    to: referrerEmail,
+    subject: `${jobTitle} will be deleted in 3 days`,
+    html: layout(`${jobTitle} will be deleted in 3 days`, `It's been inactive for 27 days — reactivate it to keep it.`, [
+      eyebrow('Job posting'),
+      badge('Inactive · 3 days left', 'expired'),
+      heading('This posting is about to be deleted'),
+      text(`${strong(jobTitle)} at ${strong(companyName)} has been inactive for 27 days. In 3 days it will be ${strong('permanently deleted')} — along with every application, message, and C.V. sent to it.`),
+      card('Want to keep it?', [
+        'Reactivate the posting any time before then and nothing is lost.',
+        'Once it\'s deleted, there\'s no way to recover it.',
+      ], 'expired'),
+      button(jobsUrl, 'Reactivate this posting'),
+    ].join('\n')),
+  });
+}

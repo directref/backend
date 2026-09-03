@@ -22,6 +22,14 @@ export const jobs = pgTable(
     bonusNotes: text('bonus_notes'),
     isActive: boolean('is_active').notNull().default(true),
     expiresAt: timestamp('expires_at', { withTimezone: true }),
+    // Deletion clock: set the moment isActive flips to false, cleared the
+    // moment it's reactivated — so re-deactivating later always starts a
+    // fresh 30 days. The cleanup sweep (see scheduler/jobCleanupSweep.ts)
+    // emails a 3-day warning, then permanently deletes the posting (and,
+    // via cascade, its applications/messages) once deactivatedAt is 30+
+    // days old. deletionWarningEmailSentAt makes that warning idempotent.
+    deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+    deletionWarningEmailSentAt: timestamp('deletion_warning_email_sent_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(sql`now()`),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
   },
@@ -29,5 +37,6 @@ export const jobs = pgTable(
     index('jobs_referrer_id_idx').on(t.referrerId),
     index('jobs_company_name_idx').on(t.companyName),
     index('jobs_is_active_created_idx').on(t.isActive, t.createdAt),
+    index('jobs_is_active_deactivated_at_idx').on(t.isActive, t.deactivatedAt),
   ],
 );

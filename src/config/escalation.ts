@@ -30,3 +30,16 @@ export const SUBMIT_ESCALATION_MS = {
   FOLLOWUP: SUBMIT_ESCALATION_DAYS.FOLLOWUP * MS_PER_DAY,
   AUTO_CANCEL: SUBMIT_ESCALATION_DAYS.AUTO_CANCEL * MS_PER_DAY,
 } as const;
+
+// From a job posting going inactive (jobs.deactivatedAt) — the referrer gets
+// a warning email, then the posting and everything attached to it (its
+// applications, messages, and CVs on disk) is permanently deleted.
+export const JOB_CLEANUP_DAYS = {
+  DELETION_WARNING: 27, // 3 days before deletion
+  DELETE: 30,
+} as const;
+
+export const JOB_CLEANUP_MS = {
+  DELETION_WARNING: JOB_CLEANUP_DAYS.DELETION_WARNING * MS_PER_DAY,
+  DELETE: JOB_CLEANUP_DAYS.DELETE * MS_PER_DAY,
+} as const;
