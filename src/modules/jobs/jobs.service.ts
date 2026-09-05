@@ -205,6 +205,62 @@ export async function searchJobs(
   return grouped.slice(offset, offset + limit);
 }
 
+/** Job titles don't carry a structured seniority field, so this is matched
+ *  as a keyword against the title text — the only seniority signal we have. */
+const SENIORITY_KEYWORDS: Record<string, string> = {
+  junior: 'junior',
+  mid: 'mid',
+  senior: 'senior',
+  lead: 'lead',
+  manager: 'manager',
+};
+
+/** Jobs matching the seeker's saved profile preferences (desired role,
+ *  location, employment type, seniority) — a plain OR filter across
+ *  whichever fields they've set, never a ranked/scored match (see privacy
+ *  policy's "no ranking algorithm" commitment). */
+export async function getSuggestedJobs(seekerId: string, limit: number): Promise<GroupedJob[]> {
+  const [seeker] = await db
+    .select({
+      desiredRole: users.desiredRole,
+      preferredLocation: users.preferredLocation,
+      employmentType: users.employmentType,
+      seniority: users.seniority,
+    })
+    .from(users)
+    .where(eq(users.id, seekerId))
+    .limit(1);
+
+  if (!seeker) return [];
+
+  const seniorityKeyword = seeker.seniority ? SENIORITY_KEYWORDS[seeker.seniority] : undefined;
+
+  const orConditions = [];
+  if (seeker.desiredRole) {
+    orConditions.push(or(ilike(jobs.title, `%${seeker.desiredRole}%`), ilike(jobs.companyName, `%${seeker.desiredRole}%`))!);
+  }
+  if (seeker.preferredLocation) {
+    orConditions.push(ilike(jobs.location, `%${seeker.preferredLocation}%`));
+  }
+  if (seeker.employmentType) {
+    orConditions.push(eq(jobs.jobType, seeker.employmentType));
+  }
+  if (seniorityKeyword) {
+    orConditions.push(ilike(jobs.title, `%${seniorityKeyword}%`));
+  }
+  if (orConditions.length === 0) return [];
+
+  const rows = await db
+    .select({ job: jobs, referrer: referrerSelect })
+    .from(jobs)
+    .innerJoin(users, eq(users.id, jobs.referrerId))
+    .where(and(eq(jobs.isActive, true), ne(jobs.referrerId, seekerId), or(...orConditions)))
+    .orderBy(desc(jobs.createdAt));
+
+  const grouped = await groupBySourceUrl(rows);
+  return grouped.slice(0, limit);
+}
+
 /** Jobs posted by the current user */
 export async function getMyJobs(referrerId: string, page: number, limit: number) {
   const offset = (page - 1) * limit;

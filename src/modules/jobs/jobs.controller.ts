@@ -27,6 +27,12 @@ export const searchJobs = asyncHandler(async (req: Request, res: Response) => {
   res.json({ data: jobs });
 });
 
+export const getSuggestedJobs = asyncHandler(async (req: Request, res: Response) => {
+  const limit = Math.min(Number(req.query.limit) || 6, 24);
+  const jobs = await jobsService.getSuggestedJobs(req.user!.id, limit);
+  res.json({ data: jobs });
+});
+
 export const getMyJobs = asyncHandler(async (req: Request, res: Response) => {
   const { page, limit } = parsePagination(req);
   const jobs = await jobsService.getMyJobs(req.user!.id, page, limit);

@@ -12,6 +12,7 @@ router.use(requireAuth);
 // Note: specific paths before /:id to avoid route conflicts
 router.post('/scrape', scrapeLimiter, validate(ScrapeSchema), ctrl.scrapeJob);
 router.get('/feed', ctrl.getFeed);
+router.get('/suggested', ctrl.getSuggestedJobs);
 router.get('/mine', ctrl.getMyJobs);
 
 router.get('/', ctrl.searchJobs);
