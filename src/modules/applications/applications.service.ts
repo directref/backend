@@ -354,7 +354,7 @@ export async function getCVPreviewPath(applicationId: string, userId: string): P
     throw new AppError(403, 'FORBIDDEN', 'Access denied');
   }
 
-  const filePath = path.join(process.cwd(), env.UPLOADS_DIR, 'cvs', app.cvFilename);
+  const filePath = path.join(env.UPLOADS_DIR, 'cvs', app.cvFilename);
   if (!fs.existsSync(filePath)) {
     throw new AppError(404, 'FILE_NOT_FOUND', 'CV file not found on server');
   }
@@ -390,7 +390,7 @@ export async function getCVPath(applicationId: string, userId: string): Promise<
     throw new AppError(403, 'FORBIDDEN', 'Access denied');
   }
 
-  const filePath = path.join(process.cwd(), env.UPLOADS_DIR, 'cvs', app.cvFilename);
+  const filePath = path.join(env.UPLOADS_DIR, 'cvs', app.cvFilename);
   if (!fs.existsSync(filePath)) {
     throw new AppError(404, 'FILE_NOT_FOUND', 'CV file not found on server');
   }
