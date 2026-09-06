@@ -19,7 +19,7 @@ interface ReferrerRow {
 interface JobReferrerRow { job: JobRow; referrer: ReferrerRow }
 type ReferrerWithStats = ReferrerRow & { jobId: string; responseStats?: ResponseStats };
 export interface GroupedJob {
-  job: JobRow;
+  job: JobRow & { roleType: string | null };
   /** Back-compat single referrer (the top-scoring one, or the canonical
    *  posting's referrer if the group has no active postings) — existing
    *  consumers that only show one referrer (Home's matched-jobs card, the
@@ -70,7 +70,7 @@ async function groupBySourceUrl(rows: JobReferrerRow[]): Promise<GroupedJob[]> {
     const primaryReferrer = referrers[0] ?? { ...canonical.referrer, jobId: canonical.job.id };
 
     grouped.push({
-      job: { ...canonical.job, isActive: activeRows.length > 0 },
+      job: { ...canonical.job, isActive: activeRows.length > 0, roleType: deriveRoleType(canonical.job.title) },
       referrer: primaryReferrer,
       referrers,
     });
@@ -290,6 +290,21 @@ const ROLE_KEYWORDS: Record<string, string[]> = {
   'Support Engineer/Analyst': ['support engineer', 'technical support', 'customer support'],
   'Financial Analyst/Engineer': ['financial analyst', 'quant'],
 };
+
+/** Classifies a posting's free-text title into one of the canonical roles
+ *  above, for the Browse Jobs "Role type" filter — the same keyword map
+ *  used to match a seeker's desired role against real postings, reused here
+ *  in reverse (title -> role) instead of (role -> title). Returns null when
+ *  no canonical role's keywords appear in the title (e.g. "Associate
+ *  General Counsel"), same as company/location/employment type facets
+ *  already skip a job that has no value for that field. */
+function deriveRoleType(title: string): string | null {
+  const lower = title.toLowerCase();
+  for (const [role, keywords] of Object.entries(ROLE_KEYWORDS)) {
+    if (keywords.some((k) => lower.includes(k))) return role;
+  }
+  return null;
+}
 
 /** Jobs matching the seeker's saved profile preferences (desired role,
  *  location, employment type, seniority) — an AND across whichever fields
