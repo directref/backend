@@ -25,6 +25,15 @@ export const users = pgTable(
     yearsOfExperience: integer('years_of_experience'),
     employmentType: varchar('employment_type', { length: 20 }), // 'full-time' | 'part-time'
     seniority: varchar('seniority', { length: 20 }), // 'junior' | 'mid' | 'senior' | 'lead' | 'manager'
+    // CV of record — an optional default CV kept on the profile. Applying
+    // for a job can reuse it (after the seeker confirms) instead of
+    // requiring a fresh upload every time. Same shape as applications'
+    // cv columns, but a distinct file — never the same disk file as any
+    // application's CV, so replacing/removing one never affects the other.
+    cvFilename: varchar('cv_filename', { length: 255 }),
+    cvOriginalName: varchar('cv_original_name', { length: 255 }),
+    cvMimetype: varchar('cv_mimetype', { length: 80 }),
+    cvSizeBytes: integer('cv_size_bytes'),
     // Credits — every user gets 3 on signup, then +1/month thereafter (see
     // credits.service.ts), one shared balance for both sending a C.V. and
     // posting a job. All actual grants (signup, monthly, refunds) live as

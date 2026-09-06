@@ -18,6 +18,8 @@ router.post('/', uploadLimiter, uploadCV, validate(SubmitApplicationSchema), ctr
 
 router.get('/:id', ctrl.getApplication);
 router.patch('/:id/status', validate(UpdateStatusSchema), ctrl.updateStatus);
+router.patch('/:id/cv', uploadLimiter, uploadCV, ctrl.replaceCv);
+router.post('/:id/withdraw', ctrl.withdrawApplication);
 router.post('/:id/forward', validate(ForwardToHRSchema), ctrl.forwardToHR);
 router.get('/:id/cv', ctrl.downloadCV);
 router.get('/:id/cv/preview', ctrl.previewCV);

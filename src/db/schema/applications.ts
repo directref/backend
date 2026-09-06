@@ -27,6 +27,7 @@ export const applications = pgTable(
     hrEmail: varchar('hr_email', { length: 320 }),
     viewedAt: timestamp('viewed_at', { withTimezone: true }),
     forwardedAt: timestamp('forwarded_at', { withTimezone: true }),
+    withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }),
     // Clock A — from CV sent, while status is submitted/viewed. Day 1 first
     // reminder, Day 2 stronger reminder (escalatedAt — name predates this
     // meaning but the column is reused rather than migrated for a rename),
@@ -55,7 +56,9 @@ export const applications = pgTable(
       // 'internally_submitted' — referrer confirms they submitted a
       // downloaded CV into their company's internal system; only reachable
       // from 'forwarded' (enforced in the service layer, not here).
-      sql`${t.status} IN ('submitted', 'viewed', 'forwarded', 'rejected', 'expired', 'internally_submitted')`,
+      // 'withdrawn' — the seeker pulled their CV before the referrer opened
+      // it; only reachable from 'submitted' (enforced in the service layer).
+      sql`${t.status} IN ('submitted', 'viewed', 'forwarded', 'rejected', 'expired', 'internally_submitted', 'withdrawn')`,
     ),
   ],
 );

@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
 import { db } from '../../config/db';
 import { applications, applicationMessages, jobs, users } from '../../db/schema';
 import { eq, and, desc, ne, inArray, isNotNull } from 'drizzle-orm';
@@ -19,22 +20,49 @@ import { env } from '../../config/env';
 import type { SubmitApplicationDto, ForwardToHRDto } from './applications.schemas';
 
 /** Submit a CV to a referrer for a specific job */
+/** Copies the seeker's profile CV into a fresh, independent file for this
+ *  application — never the same disk file, so later replacing or removing
+ *  this application's CV (or a different application also started from the
+ *  profile CV) never touches the profile copy or any other application. */
+async function copyProfileCvForApplication(seekerId: string) {
+  const [seeker] = await db
+    .select({ cvFilename: users.cvFilename, cvOriginalName: users.cvOriginalName, cvMimetype: users.cvMimetype, cvSizeBytes: users.cvSizeBytes })
+    .from(users)
+    .where(eq(users.id, seekerId))
+    .limit(1);
+  if (!seeker?.cvFilename) throw new AppError(400, 'NO_PROFILE_CV', 'No CV on file in your profile');
+
+  const sourcePath = path.resolve(env.UPLOADS_DIR, 'cvs', seeker.cvFilename);
+  if (!fs.existsSync(sourcePath)) throw new AppError(404, 'FILE_NOT_FOUND', 'Profile CV file not found on server');
+
+  const filename = `${Date.now()}-${uuidv4()}${path.extname(seeker.cvFilename)}`;
+  await fs.promises.copyFile(sourcePath, path.resolve(env.UPLOADS_DIR, 'cvs', filename));
+
+  return {
+    cvFilename: filename,
+    cvOriginalName: seeker.cvOriginalName!,
+    cvMimetype: seeker.cvMimetype!,
+    cvSizeBytes: seeker.cvSizeBytes!,
+  };
+}
+
 export async function submitApplication(
   seekerId: string,
   dto: SubmitApplicationDto,
-  file: Express.Multer.File,
+  file: Express.Multer.File | undefined,
 ) {
+  const cleanupUploadedFile = () => { if (file) fs.unlink(file.path, () => {}); };
+
   // 1. Load the job
   const [job] = await db.select().from(jobs).where(eq(jobs.id, dto.jobId)).limit(1);
   if (!job || !job.isActive) {
-    // Clean up uploaded file if job doesn't exist
-    fs.unlink(file.path, () => {});
+    cleanupUploadedFile();
     throw new AppError(404, 'JOB_NOT_FOUND', 'Job not found or no longer active');
   }
 
   // 2. Can't apply to your own posting
   if (job.referrerId === seekerId) {
-    fs.unlink(file.path, () => {});
+    cleanupUploadedFile();
     throw new AppError(400, 'SELF_APPLICATION', 'You cannot apply to your own job posting');
   }
 
@@ -52,24 +80,28 @@ export async function submitApplication(
     .limit(1);
 
   if (existing) {
-    fs.unlink(file.path, () => {});
+    cleanupUploadedFile();
     throw new AppError(409, 'ALREADY_APPLIED', 'You have already sent your CV for this job');
   }
 
-  // 4. Insert application — sending a CV is free for seekers; credits only
+  // 4. Resolve the CV: either the freshly uploaded file, or a copy of the
+  //    seeker's profile CV (never the same file — see copyProfileCvForApplication).
+  const cv = dto.useProfileCv === 'true' || !file
+    ? await copyProfileCvForApplication(seekerId)
+    : { cvFilename: file.filename, cvOriginalName: file.originalname, cvMimetype: file.mimetype, cvSizeBytes: file.size };
+  if (file && dto.useProfileCv === 'true') cleanupUploadedFile(); // shouldn't happen from our own client, but don't leak a stray upload
+
+  // 5. Insert application — sending a CV is free for seekers; credits only
   //    gate the referrer side (posting a job), see jobs.service.ts createJob.
   const [application] = await db.insert(applications).values({
     jobId: dto.jobId,
     seekerId,
     referrerId: job.referrerId,
-    cvFilename: file.filename,
-    cvOriginalName: file.originalname,
-    cvMimetype: file.mimetype,
-    cvSizeBytes: file.size,
+    ...cv,
     coverNote: dto.coverNote,
   }).returning();
 
-  // 5. Notify referrer — in-app + email (fire-and-forget)
+  // 6. Notify referrer — in-app + email (fire-and-forget)
   const [referrer] = await db.select().from(users).where(eq(users.id, job.referrerId)).limit(1);
   const [seeker] = await db.select().from(users).where(eq(users.id, seekerId)).limit(1);
 
@@ -95,6 +127,67 @@ export async function submitApplication(
   }
 
   return application;
+}
+
+/** Swap the CV on a pending application for a different file. Only the
+ *  seeker who submitted it can do this, and only before the referrer has
+ *  opened it (status === 'submitted') — once it's been viewed, downloading
+ *  or forwarding may already be in motion on the old file. */
+export async function replaceCv(applicationId: string, seekerId: string, file: Express.Multer.File) {
+  const [app] = await db.select().from(applications).where(eq(applications.id, applicationId)).limit(1);
+  if (!app) { fs.unlink(file.path, () => {}); throw new AppError(404, 'NOT_FOUND', 'Application not found'); }
+  if (app.seekerId !== seekerId) { fs.unlink(file.path, () => {}); throw new AppError(403, 'FORBIDDEN', 'Access denied'); }
+  if (app.status !== 'submitted') {
+    fs.unlink(file.path, () => {});
+    throw new AppError(400, 'ALREADY_VIEWED', 'This CV has already been viewed by the referrer and can no longer be changed');
+  }
+
+  const [updated] = await db.update(applications).set({
+    cvFilename: file.filename,
+    cvOriginalName: file.originalname,
+    cvMimetype: file.mimetype,
+    cvSizeBytes: file.size,
+    updatedAt: new Date(),
+  }).where(eq(applications.id, applicationId)).returning();
+
+  fs.unlink(path.resolve(env.UPLOADS_DIR, 'cvs', app.cvFilename), () => {});
+
+  return updated;
+}
+
+/** Withdraw a pending application — only the seeker who submitted it, and
+ *  only before the referrer has opened it. The CV file is deleted; the
+ *  application row is kept (marked withdrawn) rather than deleted outright,
+ *  so history/response-time stats stay consistent. */
+export async function withdrawApplication(applicationId: string, seekerId: string) {
+  const [app] = await db.select().from(applications).where(eq(applications.id, applicationId)).limit(1);
+  if (!app) throw new AppError(404, 'NOT_FOUND', 'Application not found');
+  if (app.seekerId !== seekerId) throw new AppError(403, 'FORBIDDEN', 'Access denied');
+  if (app.status !== 'submitted') {
+    throw new AppError(400, 'ALREADY_VIEWED', 'This CV has already been viewed by the referrer and can no longer be withdrawn');
+  }
+
+  const [updated] = await db.update(applications).set({
+    status: 'withdrawn',
+    withdrawnAt: new Date(),
+    updatedAt: new Date(),
+  }).where(eq(applications.id, applicationId)).returning();
+
+  fs.unlink(path.resolve(env.UPLOADS_DIR, 'cvs', app.cvFilename), () => {});
+
+  const [job] = await db.select().from(jobs).where(eq(jobs.id, app.jobId)).limit(1);
+  const [seeker] = await db.select().from(users).where(eq(users.id, seekerId)).limit(1);
+  if (job && seeker) {
+    createNotification(
+      app.referrerId,
+      'cv_withdrawn',
+      `${seeker.fullName} withdrew their application`,
+      `They pulled their CV for ${job.title} at ${job.companyName} before you opened it.`,
+      `${env.FRONTEND_URL}/applications/inbox`,
+    ).catch(() => {});
+  }
+
+  return updated;
 }
 
 // ── Response-time scoring ────────────────────────────────────────────────────
@@ -354,7 +447,7 @@ export async function getCVPreviewPath(applicationId: string, userId: string): P
     throw new AppError(403, 'FORBIDDEN', 'Access denied');
   }
 
-  const filePath = path.join(env.UPLOADS_DIR, 'cvs', app.cvFilename);
+  const filePath = path.resolve(env.UPLOADS_DIR, 'cvs', app.cvFilename);
   if (!fs.existsSync(filePath)) {
     throw new AppError(404, 'FILE_NOT_FOUND', 'CV file not found on server');
   }
@@ -390,7 +483,7 @@ export async function getCVPath(applicationId: string, userId: string): Promise<
     throw new AppError(403, 'FORBIDDEN', 'Access denied');
   }
 
-  const filePath = path.join(env.UPLOADS_DIR, 'cvs', app.cvFilename);
+  const filePath = path.resolve(env.UPLOADS_DIR, 'cvs', app.cvFilename);
   if (!fs.existsSync(filePath)) {
     throw new AppError(404, 'FILE_NOT_FOUND', 'CV file not found on server');
   }

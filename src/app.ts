@@ -25,7 +25,7 @@ import adminRouter from './modules/admin/admin.router';
 import creditsRouter from './modules/credits/credits.router';
 
 // Ensure uploads directory exists
-const uploadDir = path.join(env.UPLOADS_DIR, 'cvs');
+const uploadDir = path.resolve(env.UPLOADS_DIR, 'cvs');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }

@@ -6,7 +6,9 @@ import { AppError } from '../../middleware/errorHandler';
 import { env } from '../../config/env';
 
 export const submitApplication = asyncHandler(async (req: Request, res: Response) => {
-  if (!req.file) throw new AppError(400, 'FILE_REQUIRED', 'CV file is required');
+  if (!req.file && req.body.useProfileCv !== 'true') {
+    throw new AppError(400, 'FILE_REQUIRED', 'CV file is required');
+  }
   const application = await appService.submitApplication(req.user!.id, req.body, req.file);
   res.status(201).json({ data: application });
 });
@@ -31,6 +33,17 @@ export const getApplication = asyncHandler(async (req: Request, res: Response) =
 
 export const updateStatus = asyncHandler(async (req: Request, res: Response) => {
   const data = await appService.updateStatus(String(req.params.id), req.user!.id, req.body.status);
+  res.json({ data });
+});
+
+export const replaceCv = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.file) throw new AppError(400, 'FILE_REQUIRED', 'CV file is required');
+  const data = await appService.replaceCv(String(req.params.id), req.user!.id, req.file);
+  res.json({ data });
+});
+
+export const withdrawApplication = asyncHandler(async (req: Request, res: Response) => {
+  const data = await appService.withdrawApplication(String(req.params.id), req.user!.id);
   res.json({ data });
 });
 

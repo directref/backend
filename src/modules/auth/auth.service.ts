@@ -18,6 +18,7 @@ export function sanitizeUser(user: User | Express.User) {
   const {
     passwordHash: _, emailVerifyToken: __, resetToken: ___, resetTokenExp: ____,
     workEmailVerifyToken: _____, workEmailVerifyTokenExp: ______,
+    cvFilename: _______, // internal disk filename, never exposed — same convention as applications.cvFilename
     ...safe
   } = user as User;
   return safe;

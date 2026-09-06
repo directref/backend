@@ -77,7 +77,7 @@ async function deleteExpiredInactiveJobs(): Promise<number> {
       await db.delete(jobs).where(eq(jobs.id, jobId));
 
       for (const { cvFilename } of cvFiles) {
-        const filePath = path.join(env.UPLOADS_DIR, 'cvs', cvFilename);
+        const filePath = path.resolve(env.UPLOADS_DIR, 'cvs', cvFilename);
         await fs.promises.unlink(filePath).catch((err) => {
           if (err.code !== 'ENOENT') console.error('[job-cleanup] failed to delete CV file', filePath, err);
         });

@@ -4,15 +4,15 @@ import { v4 as uuidv4 } from 'uuid';
 import { env } from './env';
 import { AppError } from '../middleware/errorHandler';
 
-const ALLOWED_MIME_TYPES = [
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-];
+// PDF only — Word docs can't be previewed inline in a browser (no native
+// renderer, unlike PDF) and render inconsistently across Word versions/OSes
+// when opened locally. Standardizing on PDF keeps every CV both previewable
+// and visually identical wherever it's opened.
+const ALLOWED_MIME_TYPES = ['application/pdf'];
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
-    const dest = path.join(env.UPLOADS_DIR, 'cvs');
+    const dest = path.resolve(env.UPLOADS_DIR, 'cvs');
     cb(null, dest);
   },
   filename: (_req, file, cb) => {
@@ -31,7 +31,7 @@ export const cvUpload = multer({
     if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new AppError(415, 'UNSUPPORTED_FILE_TYPE', 'Only PDF and Word documents are accepted'));
+      cb(new AppError(415, 'UNSUPPORTED_FILE_TYPE', 'Only PDF files are accepted'));
     }
   },
 });
