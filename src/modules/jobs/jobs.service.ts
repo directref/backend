@@ -1,6 +1,6 @@
 import { db } from '../../config/db';
 import { jobs, connections, users } from '../../db/schema';
-import { eq, and, or, ilike, desc, inArray, ne, sql } from 'drizzle-orm';
+import { eq, and, or, not, ilike, desc, inArray, ne, sql } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler';
 import { scrapeJobUrl } from '../../services/jobScraper';
 import { extractEmailDomain, emailMatchesJob } from '../../services/companyMatch';
@@ -206,19 +206,98 @@ export async function searchJobs(
 }
 
 /** Job titles don't carry a structured seniority field, so this is matched
- *  as a keyword against the title text — the only seniority signal we have. */
-const SENIORITY_KEYWORDS: Record<string, string> = {
-  junior: 'junior',
-  mid: 'mid',
-  senior: 'senior',
-  lead: 'lead',
-  manager: 'manager',
+ *  against the title text — the only seniority signal we have. Junior/
+ *  Senior/Lead/Manager only match when the title actually says so. "Mid" is
+ *  the unmarked default: most real postings for a regular/mid-level role
+ *  never write "mid" in the title at all, so requiring the literal word
+ *  matched almost nothing. Instead "mid" means "no other level is named" —
+ *  i.e. not Senior and not Junior (e.g. "Product Manager" counts as mid,
+ *  "Senior Product Manager" and "Junior Product Manager" don't). */
+function seniorityCondition(seniority: string) {
+  switch (seniority) {
+    case 'junior':
+      return ilike(jobs.title, '%junior%');
+    case 'senior':
+      return ilike(jobs.title, '%senior%');
+    case 'lead':
+      return ilike(jobs.title, '%lead%');
+    case 'manager':
+      return ilike(jobs.title, '%manager%');
+    case 'mid':
+      return and(not(ilike(jobs.title, '%senior%')), not(ilike(jobs.title, '%junior%')));
+    default:
+      return undefined;
+  }
+}
+
+/** Job postings carry free-text scraped locations ("Herzliya, Israel",
+ *  "Petah Tikva, Israel"), while the seeker's preferredLocation is now one of
+ *  the 7 regions used on the settings page. A literal ILIKE of the region
+ *  name only ever matches "Tel Aviv" and "Jerusalem" postings, so each
+ *  region is expanded to the cities it actually covers. City groupings
+ *  follow the CBS sub-district split (Central District's Sharon
+ *  sub-district vs. its Petah Tikva/Ramla/Rehovot sub-districts) plus the
+ *  Tel Aviv District, matching how Israeli tech job boards bucket cities. */
+const REGION_CITIES: Record<string, string[]> = {
+  'Tel Aviv': ['Tel Aviv', 'Ramat Gan', 'Givatayim', 'Bnei Brak', 'Holon', 'Bat Yam', 'Or Yehuda', 'Kiryat Ono'],
+  Central: ['Petah Tikva', 'Rishon LeZion', 'Rehovot', 'Ramla', 'Lod', "Modi'in", 'Ness Ziona', 'Yavne', 'Rosh HaAyin', 'Givat Shmuel'],
+  Sharon: ['Netanya', 'Herzliya', 'Kfar Saba', "Ra'anana", 'Hod HaSharon', 'Ramat HaSharon', 'Kfar Yona'],
+  Haifa: ['Haifa', 'Kiryat Ata', 'Kiryat Bialik', 'Kiryat Motzkin', 'Kiryat Yam', 'Nesher', 'Tirat Carmel'],
+  North: ['Nazareth', 'Afula', 'Tiberias', 'Karmiel', 'Nahariya', 'Kiryat Shmona', 'Safed', 'Tzfat', "Beit She'an", 'Migdal HaEmek', 'Acre', 'Akko'],
+  Jerusalem: ['Jerusalem', 'Beit Shemesh', "Ma'ale Adumim", 'Mevaseret Zion'],
+  South: ['Beer Sheva', "Be'er Sheva", 'Ashdod', 'Ashkelon', 'Eilat', 'Kiryat Gat', 'Dimona', 'Netivot', 'Sderot', 'Arad', 'Ofakim'],
+};
+
+/** OR-ed ILIKE conditions matching any city belonging to a seeker's
+ *  preferred region, plus the region name itself (covers "Remote" postings
+ *  that still list the region, and any literal match like "Tel Aviv"). */
+function locationConditions(preferredLocation: string) {
+  const cities = REGION_CITIES[preferredLocation] ?? [];
+  return [preferredLocation, ...cities].map((place) => ilike(jobs.location, `%${place}%`));
+}
+
+/** The settings page now offers "Desired role" as a dropdown of canonical
+ *  titles (see ProfileCard.tsx TECH_ROLES), which rarely appear verbatim in
+ *  a real posting's title ("Senior Frontend Engineer" doesn't contain
+ *  "Frontend Developer"). Each canonical role expands to the keyword(s) it's
+ *  actually phrased as in the wild. A role picked via the "Other" free-text
+ *  option won't be in this map — it falls back to matching the raw text
+ *  the seeker typed, same as before. */
+const ROLE_KEYWORDS: Record<string, string[]> = {
+  'Full-Stack Developer': ['full stack', 'full-stack', 'fullstack'],
+  'Back-End Developer': ['backend', 'back-end', 'back end'],
+  'Front-End Developer': ['frontend', 'front-end', 'front end'],
+  'Mobile Developer': ['mobile', 'ios', 'android'],
+  'Desktop/Enterprise Developer': ['desktop', 'enterprise application'],
+  'Embedded/Devices Developer': ['embedded', 'firmware'],
+  'Game/Graphics Developer': ['game developer', 'graphics engineer', 'unity', 'unreal'],
+  'QA/Test Engineer': ['qa', 'quality assurance', 'test engineer', 'automation engineer'],
+  'DevOps Engineer': ['devops'],
+  'Site Reliability Engineer': ['site reliability', 'sre'],
+  'Cloud Infrastructure Engineer': ['cloud infrastructure', 'cloud engineer'],
+  'Cybersecurity/InfoSec Engineer': ['security engineer', 'cybersecurity', 'infosec'],
+  'Software/Solutions Architect': ['architect'],
+  'Database Administrator': ['database administrator', 'dba'],
+  'System Administrator': ['system administrator', 'sysadmin'],
+  'Engineering Manager': ['engineering manager', 'r&d manager', 'r&d team lead'],
+  'Data Engineer': ['data engineer'],
+  'Data Scientist': ['data scientist'],
+  'AI/ML Engineer': ['machine learning', 'ml engineer', 'ai engineer'],
+  'Data/Business Analyst': ['data analyst', 'business analyst'],
+  'Product Manager': ['product manager'],
+  'Project Manager': ['project manager', 'program manager', 'scrum master'],
+  'UX/UI Designer': ['ux designer', 'ui designer', 'product designer'],
+  'Support Engineer/Analyst': ['support engineer', 'technical support', 'customer support'],
+  'Financial Analyst/Engineer': ['financial analyst', 'quant'],
 };
 
 /** Jobs matching the seeker's saved profile preferences (desired role,
- *  location, employment type, seniority) — a plain OR filter across
- *  whichever fields they've set, never a ranked/scored match (see privacy
- *  policy's "no ranking algorithm" commitment). */
+ *  location, employment type, seniority) — an AND across whichever fields
+ *  they've set, so this stays truthful to the privacy policy's "Suggested
+ *  for you is a saved search that runs the same filters you set yourself":
+ *  a saved search narrows on every criterion, it doesn't surface a job
+ *  because it happened to match just one unrelated field. Still no
+ *  scoring/ranking — matches are ordered by recency only. */
 export async function getSuggestedJobs(seekerId: string, limit: number): Promise<GroupedJob[]> {
   const [seeker] = await db
     .select({
@@ -233,28 +312,44 @@ export async function getSuggestedJobs(seekerId: string, limit: number): Promise
 
   if (!seeker) return [];
 
-  const seniorityKeyword = seeker.seniority ? SENIORITY_KEYWORDS[seeker.seniority] : undefined;
+  const seniorityCond = seeker.seniority ? seniorityCondition(seeker.seniority) : undefined;
 
-  const orConditions = [];
+  const andConditions = [eq(jobs.isActive, true), ne(jobs.referrerId, seekerId)];
+  let preferenceCount = 0;
+
   if (seeker.desiredRole) {
-    orConditions.push(or(ilike(jobs.title, `%${seeker.desiredRole}%`), ilike(jobs.companyName, `%${seeker.desiredRole}%`))!);
+    const keywords = ROLE_KEYWORDS[seeker.desiredRole] ?? [seeker.desiredRole];
+    andConditions.push(or(...keywords.map((k) => ilike(jobs.title, `%${k}%`)))!);
+    preferenceCount++;
   }
   if (seeker.preferredLocation) {
-    orConditions.push(ilike(jobs.location, `%${seeker.preferredLocation}%`));
+    // Reverted the earlier "blank location passes every region" change —
+    // tested against a real posting (Duve, genuinely Ramat Gan but scraped
+    // with a blank location) and it showed up for a Sharon search too,
+    // which is worse than not showing it: it overrides a filter the seeker
+    // explicitly set to something else. An unspecified location isn't
+    // "compatible with every region" — it's just unknown, so it should
+    // fail the filter like any other non-match. The real fix for a
+    // specific posting's blank location is correcting that job's data
+    // (scrape improvement or manual backfill), not loosening the filter.
+    andConditions.push(or(...locationConditions(seeker.preferredLocation))!);
+    preferenceCount++;
   }
   if (seeker.employmentType) {
-    orConditions.push(eq(jobs.jobType, seeker.employmentType));
+    andConditions.push(eq(jobs.jobType, seeker.employmentType));
+    preferenceCount++;
   }
-  if (seniorityKeyword) {
-    orConditions.push(ilike(jobs.title, `%${seniorityKeyword}%`));
+  if (seniorityCond) {
+    andConditions.push(seniorityCond);
+    preferenceCount++;
   }
-  if (orConditions.length === 0) return [];
+  if (preferenceCount === 0) return [];
 
   const rows = await db
     .select({ job: jobs, referrer: referrerSelect })
     .from(jobs)
     .innerJoin(users, eq(users.id, jobs.referrerId))
-    .where(and(eq(jobs.isActive, true), ne(jobs.referrerId, seekerId), or(...orConditions)))
+    .where(and(...andConditions))
     .orderBy(desc(jobs.createdAt));
 
   const grouped = await groupBySourceUrl(rows);
