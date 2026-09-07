@@ -2,7 +2,7 @@ import { db } from '../config/db';
 import { jobs } from '../db/schema';
 import { and, eq, or, isNull, lt, asc } from 'drizzle-orm';
 import { JOB_LIVENESS_CHECK_MS, JOB_LIVENESS_BATCH_SIZE } from '../config/escalation';
-import { checkJobLiveness } from '../services/jobScraper';
+import { checkJobLiveness, type LivenessResult } from '../services/jobScraper';
 import { deletionClockFields, notifyPendingSeekersOfDeactivation } from '../modules/jobs/jobs.service';
 
 /** Once a day per job (batched — see JOB_LIVENESS_BATCH_SIZE), re-checks
@@ -13,7 +13,11 @@ import { deletionClockFields, notifyPendingSeekersOfDeactivation } from '../modu
  *  timeout, a 5xx) leaves the job untouched rather than guessing — a false
  *  "dead" kills a real posting and any pending seeker's application for no
  *  reason, so silence/ambiguity is never treated as evidence. */
-export async function runJobLivenessSweep(): Promise<void> {
+export async function runJobLivenessSweep(
+  // Injectable for testing (see src/scripts/ manual verification scripts) —
+  // real callers never pass this, so behavior is unchanged.
+  check: (url: string) => Promise<LivenessResult> = checkJobLiveness,
+): Promise<void> {
   try {
     const cutoff = new Date(Date.now() - JOB_LIVENESS_CHECK_MS);
     const due = await db
@@ -29,7 +33,7 @@ export async function runJobLivenessSweep(): Promise<void> {
     let deactivated = 0;
     for (const job of due) {
       try {
-        const result = await checkJobLiveness(job.sourceUrl);
+        const result = await check(job.sourceUrl);
 
         await db.update(jobs)
           .set({ lastLivenessCheckAt: new Date() })
