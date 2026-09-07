@@ -20,7 +20,6 @@ import {
   sendCVNotificationEmail,
   sendCVViewedEmail,
   sendCVForwardedEmail,
-  sendForwardedToHREmail,
   sendReminderEmail,
   sendSecondReminderEmail,
   sendExpiredEmail,
@@ -46,10 +45,8 @@ const seeker = 'Dana Cohen';
 const referrer = 'Roni Levi';
 const job = 'Senior Product Manager, Growth & Retention';
 const company = 'Acme R&D Ltd.';
-const note = 'Worked with Dana before — strong PM & a great culture fit. Highly recommend.';
 const inboxUrl = `${env.FRONTEND_URL}/applications/inbox`;
 const appsUrl = `${env.FRONTEND_URL}/applications`;
-const cvViewUrl = `${env.FRONTEND_URL}/applications/preview-id/cv`;
 
 const templates: Array<[name: string, send: () => Promise<void>]> = [
   ['verification',          () => sendVerificationEmail(to, 'preview-token', seeker)],
@@ -58,8 +55,7 @@ const templates: Array<[name: string, send: () => Promise<void>]> = [
   // Paused in the app (uncomment to re-review the designs):
   // ['cv-viewed',             () => sendCVViewedEmail(to, seeker, referrer, job, company, appsUrl)],
   ['cv-downloaded',         () => sendCVDownloadedEmail(to, seeker, referrer, job, company, appsUrl)],
-  // forward-to-HR flow removed from the product — templates kept in email.ts only:
-  // ['forwarded-to-hr',       () => sendForwardedToHREmail(to, referrer, note, seeker, job, company, cvViewUrl)],
+  // forward-to-HR flow removed from the product entirely (endpoint deleted too):
   // ['cv-forwarded-seeker',   () => sendCVForwardedEmail(to, seeker, referrer, job, company, appsUrl)],
   ['internally-submitted',  () => sendInternallySubmittedEmail(to, seeker, referrer, job, company, appsUrl)],
   ['reminder-day1',         () => sendReminderEmail(to, referrer, seeker, job, company, inboxUrl)],

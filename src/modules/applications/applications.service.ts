@@ -9,15 +9,13 @@ import { areFriends } from '../connections/connections.service';
 import { createNotification } from '../notifications/notifications.service';
 import {
   sendCVNotificationEmail,
-  // sendForwardedToHREmail, // removed — forward-to-HR flow not supported
   // sendCVViewedEmail, // paused — see the commented call sites below
-  // sendCVForwardedEmail, // removed — forward-to-HR flow not supported
   sendCVDownloadedEmail,
   sendInternallySubmittedEmail,
   sendNewMessageEmail,
 } from '../../services/email';
 import { env } from '../../config/env';
-import type { SubmitApplicationDto, ForwardToHRDto } from './applications.schemas';
+import type { SubmitApplicationDto } from './applications.schemas';
 
 /** Submit a CV to a referrer for a specific job */
 /** Copies the seeker's profile CV into a fresh, independent file for this
@@ -399,51 +397,6 @@ export async function updateStatus(
       }
     }
   }
-
-  return updated;
-}
-
-export async function forwardToHR(applicationId: string, referrerId: string, dto: ForwardToHRDto) {
-  const [app] = await db.select().from(applications).where(eq(applications.id, applicationId)).limit(1);
-  if (!app) throw new AppError(404, 'NOT_FOUND', 'Application not found');
-  if (app.referrerId !== referrerId) throw new AppError(403, 'FORBIDDEN', 'Access denied');
-  if (app.status === 'forwarded') throw new AppError(400, 'ALREADY_FORWARDED', 'This application has already been forwarded');
-
-  const [job] = await db.select().from(jobs).where(eq(jobs.id, app.jobId)).limit(1);
-  const [referrerUser] = await db.select().from(users).where(eq(users.id, referrerId)).limit(1);
-  const [seekerUser] = await db.select().from(users).where(eq(users.id, app.seekerId)).limit(1);
-
-  const cvViewUrl = `${env.FRONTEND_URL}/applications/${applicationId}/cv`;
-
-  // Commit the state change BEFORE emailing HR: if the update fails, HR never
-  // hears about a referral that doesn't exist, and a retry can't double-send.
-  const [updated] = await db
-    .update(applications)
-    .set({
-      status: 'forwarded',
-      hrEmail: dto.hrEmail,
-      referrerNote: dto.referrerNote,
-      forwardedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(eq(applications.id, applicationId))
-    .returning();
-
-  // Forward-to-HR emails removed — the product doesn't support this flow
-  // (the frontend dialog is never rendered). The endpoint itself is dead code;
-  // if the feature ever ships, restore sendForwardedToHREmail (awaited, with a
-  // status rollback on failure) and sendCVForwardedEmail here.
-  void cvViewUrl;
-
-  // In-app note to the seeker, kept for completeness while the endpoint exists.
-  const appsUrl = `${env.FRONTEND_URL}/applications`;
-  createNotification(
-    seekerUser.id,
-    'cv_forwarded',
-    `🎉 Your CV was forwarded to HR at ${job.companyName}`,
-    `${referrerUser.fullName} sent your CV for ${job.title} to the HR team.`,
-    appsUrl,
-  ).catch(() => {});
 
   return updated;
 }

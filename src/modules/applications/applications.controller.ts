@@ -47,11 +47,6 @@ export const withdrawApplication = asyncHandler(async (req: Request, res: Respon
   res.json({ data });
 });
 
-export const forwardToHR = asyncHandler(async (req: Request, res: Response) => {
-  const data = await appService.forwardToHR(String(req.params.id), req.user!.id, req.body);
-  res.json({ data });
-});
-
 export const downloadCV = asyncHandler(async (req: Request, res: Response) => {
   const { filePath, originalName } = await appService.getCVPath(String(req.params.id), req.user!.id);
   res.download(filePath, originalName);

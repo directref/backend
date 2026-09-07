@@ -23,8 +23,6 @@ export const applications = pgTable(
     cvSizeBytes: integer('cv_size_bytes').notNull(),
     coverNote: text('cover_note'),
     status: varchar('status', { length: 30 }).notNull().default('submitted'),
-    referrerNote: text('referrer_note'),
-    hrEmail: varchar('hr_email', { length: 320 }),
     viewedAt: timestamp('viewed_at', { withTimezone: true }),
     forwardedAt: timestamp('forwarded_at', { withTimezone: true }),
     withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }),

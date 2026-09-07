@@ -295,35 +295,6 @@ export async function sendCVForwardedEmail(
   });
 }
 
-// ── Forward to HR (notify HR) ─────────────────────────────────────────────────
-
-export async function sendForwardedToHREmail(
-  hrEmail: string,
-  referrerName: string,
-  referrerNote: string | null,
-  seekerName: string,
-  jobTitle: string,
-  companyName: string,
-  cvViewUrl: string,
-): Promise<void> {
-  const blocks = [
-    eyebrow('Employee referral'),
-    badge('Referral', 'gold'),
-    heading(`${esc(referrerName)} is referring ${esc(seekerName)}`),
-    text(`${strong(referrerName)} is referring ${strong(seekerName)} for ${strong(jobTitle)} at ${strong(companyName)} through DirectRef.`),
-  ];
-  if (referrerNote) {
-    blocks.push(card(`A note from ${esc(referrerName)}`, [`&ldquo;${esc(referrerNote)}&rdquo;`], 'gold'));
-  }
-  blocks.push(button(cvViewUrl, 'View C.V.'));
-  await resend.emails.send({
-    from: env.EMAIL_FROM,
-    to: hrEmail,
-    subject: `Referral: ${seekerName} for ${jobTitle}`,
-    html: layout(`Referral: ${seekerName} for ${jobTitle}`, `${referrerName} is referring ${seekerName} for ${jobTitle}.`, blocks.join('\n')),
-  });
-}
-
 // ── Clock A — Day 1 reminder, Day 2 stronger reminder, Day 5 auto-cancel ──────
 
 /** Day 1 — nudges the referrer that a CV is still waiting on them. */
