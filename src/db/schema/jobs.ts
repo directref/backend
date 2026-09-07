@@ -30,6 +30,11 @@ export const jobs = pgTable(
     // days old. deletionWarningEmailSentAt makes that warning idempotent.
     deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
     deletionWarningEmailSentAt: timestamp('deletion_warning_email_sent_at', { withTimezone: true }),
+    // Daily link-liveness sweep (see scheduler/jobLivenessSweep.ts) — when
+    // this posting's source link was last checked, so the sweep can pick up
+    // whichever active jobs are most overdue rather than re-checking
+    // everything every tick.
+    lastLivenessCheckAt: timestamp('last_liveness_check_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(sql`now()`),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
   },
@@ -38,5 +43,6 @@ export const jobs = pgTable(
     index('jobs_company_name_idx').on(t.companyName),
     index('jobs_is_active_created_idx').on(t.isActive, t.createdAt),
     index('jobs_is_active_deactivated_at_idx').on(t.isActive, t.deactivatedAt),
+    index('jobs_is_active_liveness_check_idx').on(t.isActive, t.lastLivenessCheckAt),
   ],
 );

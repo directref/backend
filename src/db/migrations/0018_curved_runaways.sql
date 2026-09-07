@@ -1,0 +1,2 @@
+ALTER TABLE "jobs" ADD COLUMN "last_liveness_check_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "jobs_is_active_liveness_check_idx" ON "jobs" USING btree ("is_active","last_liveness_check_at");

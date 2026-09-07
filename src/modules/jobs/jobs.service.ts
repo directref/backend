@@ -387,7 +387,7 @@ export async function getMyJobs(referrerId: string, page: number, limit: number)
 
 /** isActive flipping off starts the 30-day deletion clock; flipping back on
  *  cancels it, so a later re-deactivation always gets a fresh 30 days. */
-function deletionClockFields(existing: JobRow, nextIsActive: boolean | undefined): Partial<JobRow> {
+export function deletionClockFields(existing: JobRow, nextIsActive: boolean | undefined): Partial<JobRow> {
   if (nextIsActive === false && existing.isActive) {
     return { deactivatedAt: new Date(), deletionWarningEmailSentAt: null };
   }
@@ -414,28 +414,34 @@ export async function updateJob(jobId: string, referrerId: string, dto: UpdateJo
     .returning();
 
   // Deactivating (not reactivating) — warn seekers whose CV is still sitting
-  // unopened, in-app only (no email, this isn't urgent enough for that).
-  // 'submitted'/'viewed' means the referrer hasn't downloaded it yet —
-  // once downloaded (status 'forwarded' or later) it's out of their hands
-  // either way, so there's nothing actionable left to tell them.
+  // unopened. 'submitted'/'viewed' means the referrer hasn't downloaded it
+  // yet — once downloaded (status 'forwarded' or later) it's out of their
+  // hands either way, so there's nothing actionable left to tell them.
   if (existing.isActive && dto.isActive === false) {
-    const pending = await db
-      .select({ seekerId: applications.seekerId })
-      .from(applications)
-      .where(and(eq(applications.jobId, jobId), inArray(applications.status, ['submitted', 'viewed'])));
-
-    for (const { seekerId } of pending) {
-      createNotification(
-        seekerId,
-        'job_deactivated',
-        'A job you applied to is no longer active',
-        `${updated.title} at ${updated.companyName} was closed by the referrer.`,
-        `${env.FRONTEND_URL}/applications`,
-      ).catch(() => {});
-    }
+    await notifyPendingSeekersOfDeactivation(jobId, updated.title, updated.companyName);
   }
 
   return updated;
+}
+
+/** Shared by updateJob (manual toggle) and jobLivenessSweep (automatic
+ *  deactivation on a confirmed-dead source link) — in-app only, no email,
+ *  this isn't urgent enough for that. */
+export async function notifyPendingSeekersOfDeactivation(jobId: string, jobTitle: string, companyName: string) {
+  const pending = await db
+    .select({ seekerId: applications.seekerId })
+    .from(applications)
+    .where(and(eq(applications.jobId, jobId), inArray(applications.status, ['submitted', 'viewed'])));
+
+  for (const { seekerId } of pending) {
+    createNotification(
+      seekerId,
+      'job_deactivated',
+      'A job you applied to is no longer active',
+      `${jobTitle} at ${companyName} was closed by the referrer.`,
+      `${env.FRONTEND_URL}/applications`,
+    ).catch(() => {});
+  }
 }
 
 export async function deleteJob(jobId: string, referrerId: string): Promise<void> {

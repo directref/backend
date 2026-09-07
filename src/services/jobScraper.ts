@@ -557,3 +557,59 @@ export async function scrapeJobUrl(url: string): Promise<ScrapedJob> {
     return {};
   }
 }
+
+export type LivenessResult = 'alive' | 'dead' | 'unknown';
+
+/** Checks whether a posting's source link is still live, for the daily
+ *  liveness sweep (jobLivenessSweep.ts). Deliberately conservative — only
+ *  returns 'dead' on an unambiguous signal, never on ambiguity, since a
+ *  false "dead" auto-deactivates a real posting and kills any pending
+ *  seeker's application for no reason:
+ *   - 404/410 (resource confirmed gone) -> dead
+ *   - JSON-LD JobPosting.validThrough in the past (many ATS platforms set
+ *     this for Google for Jobs indexing) -> dead
+ *   - everything else — 2xx with no closure signal, a 5xx, a timeout, a
+ *     network failure — -> unknown (left alone; most ATS platforms return
+ *     200 for a filled/closed role and just change the page content, which
+ *     this doesn't attempt to parse per-platform).
+ *  Never throws. */
+export async function checkJobLiveness(url: string): Promise<LivenessResult> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+      timeout: 10000,
+      redirect: 'follow',
+    });
+
+    if (res.status === 404 || res.status === 410) return 'dead';
+    if (!res.ok) return 'unknown';
+
+    const html = await res.text();
+    const jsonLdMatches = html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+    for (const match of jsonLdMatches) {
+      try {
+        const data = JSON.parse(match[1].replace(/,(\s*[}\]])/g, '$1'));
+        const candidates: any[] = Array.isArray(data) ? data
+          : Array.isArray(data?.['@graph']) ? data['@graph']
+          : [data];
+        const job = candidates.find((d) => {
+          const t = (d as { ['@type']?: unknown } | null)?.['@type'];
+          return t === 'JobPosting' || (Array.isArray(t) && t.includes('JobPosting'));
+        });
+        if (job?.validThrough) {
+          const validThrough = new Date(job.validThrough);
+          if (!isNaN(validThrough.getTime()) && validThrough.getTime() < Date.now()) return 'dead';
+        }
+      } catch {
+        // invalid JSON, try next block
+      }
+    }
+
+    return 'alive';
+  } catch {
+    return 'unknown';
+  }
+}

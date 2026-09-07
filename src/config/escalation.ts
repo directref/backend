@@ -43,3 +43,11 @@ export const JOB_CLEANUP_MS = {
   DELETION_WARNING: JOB_CLEANUP_DAYS.DELETION_WARNING * MS_PER_DAY,
   DELETE: JOB_CLEANUP_DAYS.DELETE * MS_PER_DAY,
 } as const;
+
+// Daily link-liveness sweep (jobLivenessSweep.ts) — how often each active
+// job's source link gets re-checked, and how many it checks per scheduler
+// tick (the tick itself runs every 15m; this just caps how many external
+// requests one tick fires off, so a growing jobs table never turns one tick
+// into a burst of dozens of simultaneous outbound requests).
+export const JOB_LIVENESS_CHECK_MS = MS_PER_DAY;
+export const JOB_LIVENESS_BATCH_SIZE = 20;
