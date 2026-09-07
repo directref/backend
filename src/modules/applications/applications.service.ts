@@ -335,6 +335,15 @@ export async function updateStatus(
   const [app] = await db.select().from(applications).where(eq(applications.id, applicationId)).limit(1);
   if (!app) throw new AppError(404, 'NOT_FOUND', 'Application not found');
   if (app.referrerId !== referrerId) throw new AppError(403, 'FORBIDDEN', 'Access denied');
+  // Once an application has reached an end state, nothing should move it
+  // elsewhere — most importantly 'withdrawn': the seeker pulled it and its
+  // CV file is already deleted from disk, so "Download" or "Not a fit"
+  // reaching here would either 404 or silently override a decision that
+  // was never the referrer's to make.
+  const TERMINAL_STATUSES = ['withdrawn', 'rejected', 'expired', 'internally_submitted'];
+  if (TERMINAL_STATUSES.includes(app.status)) {
+    throw new AppError(400, 'ALREADY_DECIDED', 'This application has already reached a final state and can no longer be updated');
+  }
   // Confirming internal submission only makes sense after the CV was actually
   // downloaded — that's what starts Clock B in the first place.
   if (status === 'internally_submitted' && app.status !== 'forwarded') {
