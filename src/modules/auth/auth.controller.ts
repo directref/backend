@@ -183,6 +183,11 @@ export const linkedinCallback = asyncHandler(async (req: Request, res: Response)
   }
 
   try {
+    // Both calls previously had no timeout — if LinkedIn's API is ever slow
+    // or unresponsive, the request just hung indefinitely with no error and
+    // no redirect (reported as "silently does nothing"). 10s each, matching
+    // the general shape of an interactive OAuth round-trip a user is
+    // actively waiting on.
     const tokenRes = await fetch('https://www.linkedin.com/oauth/v2/accessToken', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -193,12 +198,14 @@ export const linkedinCallback = asyncHandler(async (req: Request, res: Response)
         client_id: env.LINKEDIN_CLIENT_ID,
         client_secret: env.LINKEDIN_CLIENT_SECRET,
       }),
+      signal: AbortSignal.timeout(10_000),
     });
     if (!tokenRes.ok) throw new Error(`token exchange failed: ${tokenRes.status}`);
     const { access_token } = (await tokenRes.json()) as LinkedInTokenResponse;
 
     const profileRes = await fetch('https://api.linkedin.com/v2/userinfo', {
       headers: { Authorization: `Bearer ${access_token}` },
+      signal: AbortSignal.timeout(10_000),
     });
     if (!profileRes.ok) throw new Error(`userinfo fetch failed: ${profileRes.status}`);
     const profile = (await profileRes.json()) as LinkedInUserInfo;
