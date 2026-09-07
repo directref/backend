@@ -8,6 +8,7 @@ export type NotificationType =
   | 'cv_received'
   | 'cv_rejected'
   | 'cv_withdrawn'             // seeker pulled a pending application before the referrer opened it
+  | 'job_deactivated'          // referrer deactivated a job a seeker's pending CV is still sitting on
   | 'cv_reminder'              // Clock A Day 1 — nudges the referrer, who hasn't acted yet
   | 'cv_escalated'             // Clock A Day 2 — stronger reminder to the referrer, with a deadline
   | 'cv_expired'               // Day 5 — application auto-closed with no response (either clock)

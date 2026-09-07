@@ -1,11 +1,13 @@
 import { db } from '../../config/db';
-import { jobs, connections, users } from '../../db/schema';
+import { jobs, connections, users, applications } from '../../db/schema';
 import { eq, and, or, not, ilike, desc, inArray, ne, sql } from 'drizzle-orm';
 import { AppError } from '../../middleware/errorHandler';
 import { scrapeJobUrl } from '../../services/jobScraper';
 import { extractEmailDomain, emailMatchesJob } from '../../services/companyMatch';
 import { getResponseStatsForReferrers, type ResponseStats } from '../applications/applications.service';
 import { spendCredit } from '../credits/credits.service';
+import { createNotification } from '../notifications/notifications.service';
+import { env } from '../../config/env';
 import type { CreateJobDto, UpdateJobDto } from './jobs.schemas';
 
 type JobRow = typeof jobs.$inferSelect;
@@ -410,6 +412,29 @@ export async function updateJob(jobId: string, referrerId: string, dto: UpdateJo
     })
     .where(eq(jobs.id, jobId))
     .returning();
+
+  // Deactivating (not reactivating) — warn seekers whose CV is still sitting
+  // unopened, in-app only (no email, this isn't urgent enough for that).
+  // 'submitted'/'viewed' means the referrer hasn't downloaded it yet —
+  // once downloaded (status 'forwarded' or later) it's out of their hands
+  // either way, so there's nothing actionable left to tell them.
+  if (existing.isActive && dto.isActive === false) {
+    const pending = await db
+      .select({ seekerId: applications.seekerId })
+      .from(applications)
+      .where(and(eq(applications.jobId, jobId), inArray(applications.status, ['submitted', 'viewed'])));
+
+    for (const { seekerId } of pending) {
+      createNotification(
+        seekerId,
+        'job_deactivated',
+        'A job you applied to is no longer active',
+        `${updated.title} at ${updated.companyName} was closed by the referrer.`,
+        `${env.FRONTEND_URL}/applications`,
+      ).catch(() => {});
+    }
+  }
+
   return updated;
 }
 
