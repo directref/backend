@@ -111,8 +111,8 @@ export async function submitApplication(
     createNotification(
       referrer.id,
       'cv_received',
-      `${seeker.fullName} sent you their CV`,
-      `Applied for ${job.title} at ${job.companyName}.`,
+      `${seeker.fullName} applied with a CV`,
+      `Submitted for ${job.title} at ${job.companyName}.`,
       dashboardUrl,
     ).catch(() => {});
     // Email
@@ -182,7 +182,7 @@ export async function withdrawApplication(applicationId: string, seekerId: strin
       app.referrerId,
       'cv_withdrawn',
       `${seeker.fullName} withdrew their application`,
-      `They pulled their CV for ${job.title} at ${job.companyName} before you opened it.`,
+      `${seeker.fullName} withdrew the CV for ${job.title} at ${job.companyName} before it was reviewed.`,
       `${env.FRONTEND_URL}/applications/inbox`,
     ).catch(() => {});
   }
@@ -381,7 +381,7 @@ export async function updateStatus(
           app.seekerId,
           'cv_forwarded',
           `${referrer.fullName} downloaded your CV`,
-          `Your application for ${job.title} at ${job.companyName} was accepted — they'll be applying with your CV.`,
+          `Your application for ${job.title} at ${job.companyName} was accepted — ${referrer.fullName} downloaded the CV to apply.`,
           appsUrl,
         ).catch(() => {});
         sendCVDownloadedEmail(seeker.email, seeker.fullName, referrer.fullName, job.title, job.companyName, appsUrl)
@@ -391,7 +391,7 @@ export async function updateStatus(
           app.seekerId,
           'cv_internally_submitted',
           `${referrer.fullName} submitted your CV internally`,
-          `Great news — your CV for ${job.title} at ${job.companyName} was submitted into their internal system.`,
+          `Great news! Your CV for ${job.title} at ${job.companyName} was submitted into the internal system.`,
           appsUrl,
         ).catch(() => {});
         sendInternallySubmittedEmail(seeker.email, seeker.fullName, referrer.fullName, job.title, job.companyName, appsUrl)
@@ -473,7 +473,7 @@ export async function getCVPreviewPath(applicationId: string, userId: string): P
         const [referrer] = await db.select().from(users).where(eq(users.id, app.referrerId)).limit(1);
         if (job && seeker && referrer) {
           const appsUrl = `${env.FRONTEND_URL}/applications`;
-          createNotification(seeker.id, 'cv_viewed', `${referrer.fullName} viewed your CV`, `Your CV for ${job.title} at ${job.companyName} was opened.`, appsUrl).catch(() => {});
+          createNotification(seeker.id, 'cv_viewed', `${referrer.fullName} viewed your CV`, `Your CV for ${job.title} at ${job.companyName} was reviewed.`, appsUrl).catch(() => {});
           // "CV viewed" email paused — the seeker's first email is the download, not the view.
           // sendCVViewedEmail(seeker.email, seeker.fullName, referrer.fullName, job.title, job.companyName, appsUrl)
           //   .catch((err) => console.error('[email] CV viewed notify failed:', err));
@@ -515,7 +515,7 @@ export async function getCVPath(applicationId: string, userId: string): Promise<
             seeker.id,
             'cv_viewed',
             `${referrer.fullName} viewed your CV`,
-            `Your CV for ${job.title} at ${job.companyName} was opened.`,
+            `Your CV for ${job.title} at ${job.companyName} was reviewed.`,
             appsUrl,
           ).catch(() => {});
           // "CV viewed" email paused — the seeker's first email is the download, not the view.
