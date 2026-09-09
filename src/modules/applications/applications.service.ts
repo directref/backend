@@ -612,12 +612,16 @@ export async function sendMessage(
     .values({ applicationId, senderId, content })
     .returning();
 
-  // Notify the other party — fire-and-forget
+  // Notify the other party — fire-and-forget. Deep-links straight into this
+  // application's own thread (tab=received for the referrer's CV Inbox,
+  // tab=sent for the seeker's Sent CV) instead of the bare list, which used
+  // to leave the recipient hunting for which of several applicants the new
+  // message belonged to.
   const recipientId = senderId === app.seekerId ? app.referrerId : app.seekerId;
   const recipientLinkUrl =
     senderId === app.seekerId
-      ? `${env.FRONTEND_URL}/applications/inbox`
-      : `${env.FRONTEND_URL}/applications`;
+      ? `${env.FRONTEND_URL}/applications?tab=received&openMessage=${applicationId}`
+      : `${env.FRONTEND_URL}/applications?tab=sent&openMessage=${applicationId}`;
 
   db.select({ fullName: users.fullName, avatarUrl: users.avatarUrl })
     .from(users)
