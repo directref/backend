@@ -52,6 +52,25 @@ export function isPersonalEmailDomain(domain: string): boolean {
   return PERSONAL_EMAIL_DOMAINS.has(domain.toLowerCase());
 }
 
+/**
+ * If a just-verified account email belongs to a company domain (not a
+ * personal provider), the account-verification step already proved the user
+ * owns that mailbox — so there's no reason to make them separately verify a
+ * work email too. Returns fields to merge into the user row; `{}` for a
+ * personal-domain email (they still go through the dedicated work-email
+ * flow in Settings) or a missing email (OAuth without an email scope, which
+ * falls back to a synthetic placeholder address that must never be trusted
+ * as a work email).
+ */
+export function autoVerifiedWorkEmailFields(
+  email: string | null | undefined,
+): { workEmail: string; workEmailVerified: true } | Record<string, never> {
+  if (!email) return {};
+  const domain = extractEmailDomain(email);
+  if (!domain || isPersonalEmailDomain(domain)) return {};
+  return { workEmail: email.toLowerCase(), workEmailVerified: true };
+}
+
 function normalizeCompanyName(name: string): string {
   return name
     .toLowerCase()

@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 import { AppError } from '../middleware/errorHandler';
 import { grantSignupCredits } from '../modules/credits/credits.service';
+import { autoVerifiedWorkEmailFields } from '../services/companyMatch';
 
 export function configurePassport(): void {
   // ─── Local Strategy (email + password) ────────────────────────────────────
@@ -88,7 +89,13 @@ export function configurePassport(): void {
               if (byEmail) {
                 await db
                   .update(users)
-                  .set({ googleId, avatarUrl, emailVerified: true, updatedAt: new Date() })
+                  .set({
+                    googleId,
+                    avatarUrl,
+                    emailVerified: true,
+                    updatedAt: new Date(),
+                    ...(!byEmail.workEmail ? autoVerifiedWorkEmailFields(googleEmail) : {}),
+                  })
                   .where(eq(users.id, byEmail.id));
                 return done(null, byEmail);
               }
@@ -103,6 +110,10 @@ export function configurePassport(): void {
                 googleId,
                 avatarUrl,
                 emailVerified: true,
+                // googleEmail is undefined for the placeholder-address branch
+                // above, and autoVerifiedWorkEmailFields no-ops on that, so
+                // the placeholder domain is never mistaken for a work email.
+                ...autoVerifiedWorkEmailFields(googleEmail),
               })
               .returning();
 
