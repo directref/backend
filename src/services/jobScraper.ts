@@ -120,6 +120,41 @@ function extractComeetCredentials(html: string): { token: string; companyUid: st
   return { token: tokenMatch[1], companyUid: companyUidMatch[1], positionUid: positionUidMatch[1] };
 }
 
+/**
+ * Last-resort fallback: Webflow's CMS "Rich Text" field always renders as
+ * `<div class="... w-richtext ...">`, server-side, with no JS needed to see
+ * it — extremely common for smaller/modern companies that build their own
+ * careers page in Webflow rather than embed a known ATS. Those pages
+ * typically carry neither JobPosting JSON-LD nor an og:description long
+ * enough to be the actual posting, so without this every such site falls
+ * through to title-only results. When a page has more than one of these
+ * blocks (e.g. a stray pull-quote elsewhere), the largest one wins — the
+ * real job description is reliably the longest rich-text block on a
+ * careers page.
+ */
+function extractWebflowRichText(html: string): string | undefined {
+  const openTagRe = /<div\b[^>]*\bclass=["'][^"']*\bw-richtext\b[^"']*["'][^>]*>/gi;
+  const tagRe = /<(\/?)div\b[^>]*>/gi;
+  let best: string | undefined;
+  let m: RegExpExecArray | null;
+  while ((m = openTagRe.exec(html))) {
+    const contentStart = m.index + m[0].length;
+    tagRe.lastIndex = contentStart;
+    let depth = 1;
+    let contentEnd: number | undefined;
+    let tm: RegExpExecArray | null;
+    while ((tm = tagRe.exec(html))) {
+      depth += tm[1] ? -1 : 1;
+      if (depth === 0) { contentEnd = tm.index; break; }
+    }
+    if (contentEnd === undefined) continue;
+    const text = htmlToStructuredText(html.slice(contentStart, contentEnd));
+    if (text && (!best || text.length > best.length)) best = text;
+    openTagRe.lastIndex = contentEnd; // skip past this block's contents
+  }
+  return best ? best.slice(0, 20_000) : undefined;
+}
+
 function normalizeWorkMode(raw: string | undefined): string | undefined {
   const s = raw?.toLowerCase();
   if (!s) return undefined;
@@ -545,11 +580,17 @@ export async function scrapeJobUrl(url: string): Promise<ScrapedJob> {
 
     const companyName = siteName ?? companyFromTitle ?? undefined;
 
+    // Same reasoning as Comeet's static description above: a page's own
+    // structured content is more likely to be the real posting than
+    // og:description, which is often just a generic company blurb (as seen
+    // literally in some sites' non-JobPosting JSON-LD) — so it wins when found.
+    const webflowDescription = extractWebflowRichText(html);
+
     return {
       title:       title || undefined,
       companyName: companyName || undefined,
       location:    comeetExtras?.location,
-      description: comeetExtras?.description ?? (ogDesc?.slice(0, 20_000) || undefined),
+      description: comeetExtras?.description ?? webflowDescription ?? (ogDesc?.slice(0, 20_000) || undefined),
       jobType:     comeetExtras?.jobType,
       workMode:    comeetExtras?.workMode,
     };
