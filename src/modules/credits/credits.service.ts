@@ -26,7 +26,7 @@ export function getPackages(): CreditPackage[] {
   return CREDIT_PACKAGES;
 }
 
-const SIGNUP_CREDITS = 3;
+const SIGNUP_CREDITS = 5;
 const MONTHLY_CREDITS = 1;
 
 function currentMonth(): string {

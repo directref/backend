@@ -34,7 +34,7 @@ export const users = pgTable(
     cvOriginalName: varchar('cv_original_name', { length: 255 }),
     cvMimetype: varchar('cv_mimetype', { length: 80 }),
     cvSizeBytes: integer('cv_size_bytes'),
-    // Credits — every user gets 3 on signup, then +1/month thereafter (see
+    // Credits — every user gets 5 on signup, then +1/month thereafter (see
     // credits.service.ts), one shared balance for both sending a C.V. and
     // posting a job. All actual grants (signup, monthly, refunds) live as
     // rows in credit_purchases; freeCreditsMonth here is just the 'YYYY-MM'
