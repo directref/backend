@@ -6,6 +6,7 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { AppError } from '../../middleware/errorHandler';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../../services/email';
+import { autoVerifiedWorkEmailFields } from '../../services/companyMatch';
 import { generateInviteCode } from '../invites/invites.service';
 import { grantSignupCredits } from '../credits/credits.service';
 import type { RegisterDto } from './auth.schemas';
@@ -44,6 +45,11 @@ export async function register(dto: RegisterDto): Promise<User> {
     emailVerifyToken: hasEmailService ? emailVerifyToken : null,
     emailVerified: !hasEmailService, // auto-verify if no email service
     inviteCode,
+    // If the account email itself is a company domain, account-email
+    // verification doubles as work-email verification — no separate
+    // round-trip needed. Only applies when we're auto-verifying the account
+    // email above (no email service); otherwise this happens in verifyEmail().
+    ...(!hasEmailService ? autoVerifiedWorkEmailFields(dto.email) : {}),
   }).returning();
 
   await grantSignupCredits(user.id);
@@ -76,6 +82,9 @@ export async function verifyEmail(token: string): Promise<void> {
     emailVerified: true,
     emailVerifyToken: null,
     updatedAt: new Date(),
+    // Same company-domain auto-verify as register() — only when no work
+    // email has been set yet, so this never clobbers one already in flight.
+    ...(!user.workEmail ? autoVerifiedWorkEmailFields(user.email) : {}),
   }).where(eq(users.id, user.id));
 }
 
@@ -150,6 +159,7 @@ export async function findOrCreateFromLinkedIn(profile: {
         avatarUrl: profile.avatarUrl,
         emailVerified: true,
         updatedAt: new Date(),
+        ...(!byEmail.workEmail ? autoVerifiedWorkEmailFields(profile.email) : {}),
       }).where(eq(users.id, byEmail.id));
       return byEmail;
     }
@@ -161,6 +171,10 @@ export async function findOrCreateFromLinkedIn(profile: {
     linkedinId: profile.linkedinId,
     avatarUrl: profile.avatarUrl,
     emailVerified: true,
+    // profile.email is null for the placeholder-address branch above, and
+    // autoVerifiedWorkEmailFields already no-ops on a null email, so the
+    // placeholder domain is never mistaken for a work email.
+    ...autoVerifiedWorkEmailFields(profile.email),
   }).returning();
 
   await grantSignupCredits(newUser.id);
